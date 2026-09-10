@@ -12,10 +12,11 @@ outils d'administration.
 
 ## Statut
 
-🚧 **Phase 1 — Local development foundation** — aucune fonctionnalité métier n'est
-encore implémentée (pas de RAG, pas de chat, pas d'authentification, pas
-d'ingestion). Cette phase met en place uniquement l'environnement de
-développement local.
+🚧 **Phase 2 — Database schema + PostgreSQL RLS** — le schéma métier et
+l'isolation multi-entreprise au niveau base de données sont en place et
+testés. Aucune fonctionnalité applicative n'est encore implémentée : pas
+d'authentification (Auth.js), pas d'embeddings, pas de LLM/Groq, pas de
+RAG, pas de chat, pas de workflows n8n, pas d'UI métier.
 
 ## Stack
 
@@ -61,6 +62,72 @@ npm run dev
 - Health check : http://localhost:3000/api/health
 - n8n : http://localhost:5678
 - PostgreSQL : `docker compose -f docker/docker-compose.yml exec postgres pg_isready`
+
+## Base de données (Phase 2)
+
+### Schéma
+
+12 tables : `companies`, `departments`, `users`, `documents`,
+`document_versions`, `document_chunks`, `ingestion_jobs`, `conversations`,
+`conversation_messages`, `citations`, `feedback`, `audit_logs`.
+Définition complète : [`db/migrations/`](db/migrations/).
+
+### Rôles PostgreSQL
+
+- **migration_role** (`POSTGRES_USER`, superutilisateur Docker local) —
+  migrations, création des policies, seed, maintenance contrôlée.
+  **Jamais utilisé au runtime.** Contourne RLS par nature (propriété des
+  superutilisateurs PostgreSQL, pas une faille de ce schéma).
+- **app_role** — rôle applicatif restreint (`NOSUPERUSER`, `NOBYPASSRLS`),
+  créé par `db/migrations/0002_roles.sql`. Utilisé pour **toutes** les
+  requêtes runtime, une fois qu'il y en aura (Phase 3+). Ne peut jamais
+  contourner les policies RLS.
+
+### Row Level Security
+
+RLS activée et forcée sur les 12 tables. `document_chunks` porte le
+filtre complet (company + statut publication du document et de la
+version + visibilité company/department/restricted) directement sur la
+table qui servira au futur retrieval vectoriel — l'autorisation fait
+partie de la requête, jamais un post-filtre. Détail des policies :
+[`db/migrations/0009_rls_and_grants.sql`](db/migrations/0009_rls_and_grants.sql).
+
+### Contexte d'autorisation
+
+Le contexte (`company_id`, `role`, `department_id`) sera fourni par
+Auth.js en Phase 3+. Pour l'instant, `db/db.mjs` expose
+`withAuthContext()`, qui l'applique de façon strictement
+transactionnelle :
+
+```
+BEGIN
+SELECT set_config('app.company_id', '...', true)
+SELECT set_config('app.role', '...', true)
+SELECT set_config('app.department_id', '...', true)
+-- requête
+COMMIT
+```
+
+Le `true` (LOCAL) garantit que le contexte disparaît automatiquement au
+`COMMIT`/`ROLLBACK` — jamais de variable globale applicative.
+
+### Commandes
+
+```
+npm run db:migrate   # applique les migrations non encore appliquées (idempotent)
+npm run db:reset      # DROP/CREATE SCHEMA public (ne touche pas aux rôles) puis re-migrer
+npm run db:seed       # données fictives multi-entreprises (voir db/seed.mjs)
+npm run test:rls       # 13 tests d'isolation, exécutés directement via app_role
+```
+
+### Tests de sécurité
+
+`tests/integration/rls/` — connectent directement en PostgreSQL avec
+`app_role` (jamais via une fonction TypeScript de filtrage) : isolation
+cross-company, isolation par rôle/département, documents non publiés/
+supprimés/obsolètes, anciennes versions, cycle de vie transactionnel du
+contexte, et une preuve explicite que `app_role` voit strictement moins
+de lignes que `migration_role` sur la même requête sans clause `WHERE`.
 
 ## Licence / confidentialité
 

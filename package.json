@@ -7,10 +7,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:migrate": "node db/migrate.mjs",
+    "db:reset": "node db/reset.mjs",
+    "db:seed": "node db/seed.mjs",
+    "test:rls": "node --test tests/integration/rls/*.test.mjs"
   },
   "dependencies": {
     "next": "^16.3.4",
+    "pg": "^8.13.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -18,6 +23,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "dotenv": "^16.4.0",
     "eslint": "^9.17.0",
     "eslint-config-next": "^16.3.4",
     "typescript": "^5.7.0"
