@@ -12,20 +12,55 @@ outils d'administration.
 
 ## Statut
 
-🚧 **Initialisation** — aucune fonctionnalité métier n'est encore implémentée.
+🚧 **Phase 1 — Local development foundation** — aucune fonctionnalité métier n'est
+encore implémentée (pas de RAG, pas de chat, pas d'authentification, pas
+d'ingestion). Cette phase met en place uniquement l'environnement de
+développement local.
 
-Ce dépôt contient pour l'instant uniquement la structure de base du projet
-(README, .gitignore, .env.example). Le développement du produit n'a pas commencé.
-
-## Stack envisagée
+## Stack
 
 - Next.js + TypeScript
-- PostgreSQL + pgvector
-- Auth.js (ou équivalent)
-- OpenAI / Groq (embeddings + LLM)
-- Stockage S3-compatible
-- n8n (automatisation)
-- Docker
+- PostgreSQL + pgvector (Docker en local, Supabase Free en démonstration)
+- Auth.js (Phase 2+)
+- Groq (LLM) — modèle `openai/gpt-oss-120b`
+- Embeddings locaux — `Xenova/multilingual-e5-small` via `@huggingface/transformers` (384 dimensions, CPU, gratuit)
+- Stockage Supabase Storage (abstraction remplaçable)
+- n8n (auto-hébergé, Docker)
+
+## Développement local (Phase 1)
+
+### Prérequis
+
+- Node.js >= 24
+- Docker + Docker Compose
+
+### Installation
+
+```
+npm install
+cp .env.example .env.local
+```
+
+Renseigner les valeurs dans `.env.local` (jamais commit — voir `.gitignore`).
+
+### Lancer les services (PostgreSQL + pgvector, n8n)
+
+```
+docker compose -f docker/docker-compose.yml up -d
+```
+
+### Lancer l'application Next.js
+
+```
+npm run dev
+```
+
+### Vérifications
+
+- Application : http://localhost:3000
+- Health check : http://localhost:3000/api/health
+- n8n : http://localhost:5678
+- PostgreSQL : `docker compose -f docker/docker-compose.yml exec postgres pg_isready`
 
 ## Licence / confidentialité
 
