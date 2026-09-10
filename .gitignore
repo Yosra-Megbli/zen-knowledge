@@ -1,0 +1,59 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+.pnp
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Python (si utilisé)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.Python
+
+# Caches
+.cache/
+.turbo/
+.eslintcache
+.parcel-cache/
+
+# Logs
+logs/
+*.log
+
+# Secrets / credentials divers
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# OS / système
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editeurs / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Divers
+*.tsbuildinfo
+coverage/
