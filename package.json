@@ -2,6 +2,7 @@
   "name": "zen-knowledge",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "ZEN Knowledge — RAG interne multi-entreprises (test technique ZEN Group, Série F, F1)",
   "scripts": {
     "dev": "next dev",
@@ -11,16 +12,26 @@
     "db:migrate": "node db/migrate.mjs",
     "db:reset": "node db/reset.mjs",
     "db:seed": "node db/seed.mjs",
-    "test:rls": "node --test tests/integration/rls/*.test.mjs"
+    "test:rls": "node --test tests/integration/rls/*.test.mjs",
+    "test:embeddings": "node --env-file-if-exists=.env.local --test tests/unit/embeddings.test.ts",
+    "test:auth": "node --env-file-if-exists=.env.local --test tests/unit/auth-callbacks.test.ts",
+    "test:rag": "node --env-file-if-exists=.env.local --test tests/integration/rag/*.test.ts",
+    "test:auth-http": "node --test tests/integration/auth/http-flow.test.mjs",
+    "test:phase3": "npm run test:rls && npm run test:embeddings && npm run test:auth && npm run test:rag"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "bcryptjs": "^3.0.3",
     "next": "^16.3.4",
+    "next-auth": "^5.0.0-beta.32",
     "pg": "^8.13.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "dotenv": "^16.4.0",
