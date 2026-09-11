@@ -38,25 +38,16 @@ env.cacheDir = process.env.TRANSFORMERS_CACHE_DIR ?? DEFAULT_CACHE_DIR;
 // assert on memoization (same reference) without re-loading the model.
 let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
-// On Node, this library defaults to the "cpu" device, which loads
-// onnxruntime-node — a native addon shipping a separate compiled
-// .node binary per OS/architecture (~200MB across all of them). Next.js's
-// output file tracing picks the binary matching the machine that ran
-// `next build`, which is correct when Vercel builds on its own Linux
-// infrastructure — but the packaged native binary still hits Vercel
-// serverless function constraints in practice (every request needing
-// an embedding crashed instantly, before any application code ran,
-// even after the model cache path and serverExternalPackages fixes).
-// Forcing the "wasm" device (onnxruntime-web) instead avoids native
-// code entirely — it's the documented approach for exactly this class
-// of platform (Vercel/Cloudflare Workers/edge runtimes cannot run
-// native addons at all). Kept native on local dev, where it already
-// works and is faster.
-const DEVICE = process.env.VERCEL ? "wasm" : undefined;
-
 export function getExtractor(): Promise<FeatureExtractionPipeline> {
   if (!extractorPromise) {
-    extractorPromise = pipeline("feature-extraction", MODEL_ID, { dtype: "q8", device: DEVICE });
+    // Uses the library's default device ("cpu" on Node -> onnxruntime-node,
+    // native). Forcing device: "wasm" was tried as a workaround for a
+    // production crash that turned out to be a missing shared-library
+    // dependency of onnxruntime-node itself (see next.config.ts
+    // outputFileTracingIncludes) — once that's fixed, native is both
+    // correct and faster; "wasm" would have needed its own separate
+    // set of onnxruntime-web binary files traced/included instead.
+    extractorPromise = pipeline("feature-extraction", MODEL_ID, { dtype: "q8" });
   }
   return extractorPromise;
 }
