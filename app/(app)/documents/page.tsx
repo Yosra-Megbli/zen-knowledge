@@ -27,7 +27,7 @@ const VISIBILITY_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   published: "bg-green-100 text-green-700",
   draft: "bg-yellow-100 text-yellow-700",
-  archived: "bg-gray-100 text-gray-500",
+  archived: "bg-ink-100 text-ink-500",
   pending_review: "bg-blue-100 text-blue-700",
   // Ingestion succeeded (extraction/chunking/embeddings done) but the
   // document has NOT been published yet — awaiting explicit review.
@@ -106,60 +106,61 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8">
+    <div className="max-w-6xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-800">Bibliothèque de documents</h1>
+        <h1 className="font-display text-xl font-semibold text-ink-950">Bibliothèque de documents</h1>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="bg-clay-500 hover:bg-clay-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
           + Nouveau document
         </button>
       </div>
 
       {loading ? (
-        <div className="text-center text-gray-400 py-20">Chargement…</div>
+        <div className="text-center text-ink-300 py-20">Chargement…</div>
       ) : docs.length === 0 ? (
-        <div className="text-center text-gray-400 py-20">Aucun document disponible.</div>
+        <div className="text-center text-ink-300 py-20">Aucun document disponible.</div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-cream-100 border-b border-ink-100">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Titre</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Visibilité</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Statut</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Version</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Propriétaire</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Révision</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500">Action</th>
+                <th className="text-left px-4 py-3 font-medium text-ink-500">Titre</th>
+                <th className="text-left px-4 py-3 font-medium text-ink-500">Visibilité</th>
+                <th className="text-left px-4 py-3 font-medium text-ink-500">Statut</th>
+                <th className="text-left px-4 py-3 font-medium text-ink-500">Version</th>
+                <th className="text-left px-4 py-3 font-medium text-ink-500">Propriétaire</th>
+                <th className="text-left px-4 py-3 font-medium text-ink-500">Révision</th>
+                <th className="text-left px-4 py-3 font-medium text-ink-500">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-ink-100">
               {docs.map((doc) => (
-                <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={doc.id} className="hover:bg-cream-100 transition-colors">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-800">{doc.title}</p>
+                    <p className="font-medium text-ink-950">{doc.title}</p>
                     {doc.description && (
-                      <p className="text-xs text-gray-400 truncate max-w-xs">{doc.description}</p>
+                      <p className="text-xs text-ink-300 truncate max-w-xs">{doc.description}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-ink-500">
                     {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[doc.latest_status ?? doc.status] ?? "bg-gray-100 text-gray-500"}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[doc.latest_status ?? doc.status] ?? "bg-ink-100 text-ink-500"}`}>
                       {doc.latest_status ?? doc.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-ink-500">
                     {doc.latest_version ? `v${doc.latest_version}` : "—"}
                     {doc.version_count > 1 && (
-                      <span className="text-xs text-gray-400 ml-1">({doc.version_count} versions)</span>
+                      <span className="text-xs text-ink-300 ml-1">({doc.version_count} versions)</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{doc.owner_email}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
+                  <td className="px-4 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
+                  <td className="px-4 py-3 text-ink-500 text-xs">
                     {doc.review_date ? new Date(doc.review_date).toLocaleDateString("fr-FR") : "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -167,7 +168,7 @@ export default function DocumentsPage() {
                       <button
                         onClick={() => handlePublish(doc.latest_version_id!)}
                         disabled={publishingId === doc.latest_version_id}
-                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition-colors"
+                        className="text-xs font-medium text-clay-600 hover:text-clay-800 disabled:opacity-50 transition-colors"
                         title="Rend cette version visible dans le chat (recherche RAG)"
                       >
                         {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
@@ -175,13 +176,14 @@ export default function DocumentsPage() {
                     ) : doc.latest_status === "failed" ? (
                       <span className="text-xs text-red-500">Échec du traitement</span>
                     ) : (
-                      <span className="text-xs text-gray-300">—</span>
+                      <span className="text-xs text-ink-300">—</span>
                     )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -192,28 +194,28 @@ export default function DocumentsPage() {
             <h2 className="text-lg font-semibold mb-4">Nouveau document</h2>
             <form onSubmit={handleUpload} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Titre *</label>
+                <label className="text-sm font-medium text-ink-700">Titre *</label>
                 <input
                   required
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-clay-400"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Description</label>
+                <label className="text-sm font-medium text-ink-700">Description</label>
                 <input
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-clay-400"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Visibilité</label>
+                <label className="text-sm font-medium text-ink-700">Visibilité</label>
                 <select
                   value={form.visibility}
                   onChange={(e) => setForm((f) => ({ ...f, visibility: e.target.value as "company" | "department" | "restricted" }))}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-clay-400"
                 >
                   <option value="company">Entreprise</option>
                   <option value="department">Département</option>
@@ -221,13 +223,13 @@ export default function DocumentsPage() {
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-700">Fichier PDF *</label>
+                <label className="text-sm font-medium text-ink-700">Fichier PDF *</label>
                 <input
                   type="file"
                   accept=".pdf,.txt,.md"
                   required
                   onChange={(e) => setForm((f) => ({ ...f, file: e.target.files?.[0] ?? null }))}
-                  className="text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                  className="text-sm text-ink-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-clay-50 file:text-clay-700 hover:file:bg-clay-100"
                 />
               </div>
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
@@ -235,14 +237,14 @@ export default function DocumentsPage() {
                 <button
                   type="button"
                   onClick={() => { setShowModal(false); setError(null); }}
-                  className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                  className="flex-1 border border-ink-100 rounded-lg py-2 text-sm font-medium text-ink-500 hover:bg-cream-100 transition-colors"
                 >
                   Annuler
                 </button>
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
+                  className="flex-1 bg-clay-500 hover:bg-clay-600 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
                 >
                   {uploading ? "Upload…" : "Uploader"}
                 </button>
