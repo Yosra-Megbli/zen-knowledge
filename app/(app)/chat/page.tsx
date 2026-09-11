@@ -23,6 +23,17 @@ interface Message {
   feedback?: "useful" | "not_useful" | null;
 }
 
+// Real questions the seeded demo dataset can actually answer (not
+// placeholder copy) — clicking one shows the full RAG flow (question
+// -> answer -> citation -> source document) in one click instead of
+// requiring a blank page and a typed question.
+const SUGGESTIONS = [
+  { icon: "📦", label: "Politique produit", question: "Quel est le délai de retour produit ?" },
+  { icon: "👋", label: "RH", question: "Quelle est la procédure d'intégration des nouveaux employés ?" },
+  { icon: "🚚", label: "Logistique", question: "Quelle est la politique de livraison ?" },
+  { icon: "🔒", label: "Confidentialité", question: "Quelle est la grille salariale et les primes pour 2026 ?" },
+];
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -35,9 +46,9 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function send(e: React.FormEvent) {
+  async function send(e: React.FormEvent, overrideQuestion?: string) {
     e.preventDefault();
-    const question = input.trim();
+    const question = (overrideQuestion ?? input).trim();
     if (!question || loading) return;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: question }]);
@@ -117,12 +128,29 @@ export default function ChatPage() {
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full">
         {messages.length === 0 && (
-          <div className="text-center text-ink-300 mt-24">
+          <div className="text-center mt-16">
             <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-clay-50 text-clay-500 font-display text-xl mb-4">
               Z
             </span>
             <p className="font-display text-2xl font-semibold text-ink-500 mb-2">Comment puis-je vous aider ?</p>
-            <p className="text-sm">Posez une question sur vos documents d&apos;entreprise.</p>
+            <p className="text-sm text-ink-300 mb-8">
+              Interrogez les documents autorisés de votre entreprise.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left max-w-xl mx-auto">
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s.question}
+                  onClick={(e) => send(e, s.question)}
+                  disabled={loading}
+                  className="bg-white border border-ink-100 rounded-xl p-4 hover:border-clay-300 hover:shadow-sm transition-all disabled:opacity-50"
+                >
+                  <p className="text-xs font-medium text-clay-600 mb-1">
+                    {s.icon} {s.label}
+                  </p>
+                  <p className="text-sm text-ink-700">{s.question}</p>
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((msg, i) => (
