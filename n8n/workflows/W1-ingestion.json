@@ -1,0 +1,172 @@
+{
+  "name": "W1 — ZEN Knowledge Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zen-ingest",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook — Receive Ingestion Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "zen-ingest"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate required fields from the webhook body.\n// company_id / role are NEVER accepted here — they come from the\n// server-side DB lookup in the Next.js route.\nconst body = $input.first().json.body ?? $input.first().json;\n\nconst required = ['email', 'fileName', 'fileBase64', 'title', 'visibility'];\nconst missing = required.filter(k => !body[k]);\n\nif (missing.length > 0) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n\nconst validVisibility = ['company', 'department', 'restricted'];\nif (!validVisibility.includes(body.visibility)) {\n  throw new Error(`visibility must be one of: ${validVisibility.join(', ')}`);\n}\n\n// Pass validated fields only — never forward unknown fields.\nreturn [{\n  json: {\n    email: body.email,\n    fileName: body.fileName,\n    fileBase64: body.fileBase64,\n    title: body.title,\n    visibility: body.visibility,\n    description: body.description ?? null,\n    departmentId: body.departmentId ?? null,\n    reviewDate: body.reviewDate ?? null,\n    documentId: body.documentId ?? null,\n    _startedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZEN_APP_URL }}/api/n8n/ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "email", "value": "={{ $json.email }}" },
+            { "name": "fileName", "value": "={{ $json.fileName }}" },
+            { "name": "fileBase64", "value": "={{ $json.fileBase64 }}" },
+            { "name": "title", "value": "={{ $json.title }}" },
+            { "name": "visibility", "value": "={{ $json.visibility }}" },
+            { "name": "description", "value": "={{ $json.description }}" },
+            { "name": "departmentId", "value": "={{ $json.departmentId }}" },
+            { "name": "reviewDate", "value": "={{ $json.reviewDate }}" },
+            { "name": "documentId", "value": "={{ $json.documentId }}" }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-ingest-api",
+      "name": "Call ZEN Ingest API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "zen-webhook-secret",
+          "name": "ZEN Webhook Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "status-check",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 201,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "check-success",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst body = res.body ?? res;\nconst startedAt = $('Validate Input').first().json._startedAt;\nconst finishedAt = new Date().toISOString();\n\nreturn [{\n  json: {\n    ok: true,\n    status: body.status,\n    documentId: body.documentId,\n    documentVersionId: body.documentVersionId,\n    ingestionJobId: body.ingestionJobId,\n    chunkCount: body.chunkCount,\n    published: false,\n    note: body.note,\n    startedAt,\n    finishedAt\n  }\n}];"
+      },
+      "id": "build-success-response",
+      "name": "Build Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconst body = res.body ?? res;\nconst startedAt = $('Validate Input').first().json._startedAt;\nconst finishedAt = new Date().toISOString();\n\n// Map HTTP status + error code to a human-readable category.\nconst statusCode = res.statusCode ?? 0;\nlet category = 'INGESTION_FAILED';\nif (statusCode === 401 || statusCode === 403) category = 'AUTH_ERROR';\nelse if (statusCode === 400) category = 'VALIDATION_ERROR';\nelse if (statusCode === 404) category = 'NOT_FOUND';\nelse if (statusCode === 503) category = 'SERVICE_UNAVAILABLE';\nelse if (statusCode >= 500) category = 'SERVER_ERROR';\nelse if (body.code) category = body.code;\n\nreturn [{\n  json: {\n    ok: false,\n    category,\n    httpStatus: statusCode,\n    error: body.error ?? 'Unknown error',\n    errorCode: body.code ?? null,\n    startedAt,\n    finishedAt\n  }\n}];"
+      },
+      "id": "build-error-response",
+      "name": "Build Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 201 }
+      },
+      "id": "respond-success",
+      "name": "Respond — Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 422 }
+      },
+      "id": "respond-error",
+      "name": "Respond — Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Webhook — Receive Ingestion Request": {
+      "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]]
+    },
+    "Validate Input": {
+      "main": [[{ "node": "Call ZEN Ingest API", "type": "main", "index": 0 }]]
+    },
+    "Call ZEN Ingest API": {
+      "main": [[{ "node": "Success?", "type": "main", "index": 0 }]]
+    },
+    "Success?": {
+      "main": [
+        [{ "node": "Build Success Response", "type": "main", "index": 0 }],
+        [{ "node": "Build Error Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Success Response": {
+      "main": [[{ "node": "Respond — Success", "type": "main", "index": 0 }]]
+    },
+    "Build Error Response": {
+      "main": [[{ "node": "Respond — Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "versionId": "w1-zen-ingestion-v1",
+  "triggerCount": 0,
+  "tags": [{ "name": "zen-knowledge" }, { "name": "ingestion" }, { "name": "W1" }]
+}
