@@ -164,41 +164,72 @@ export default function ChatPage() {
     });
   }
 
+  const inputForm = (
+    <form onSubmit={send} className="max-w-3xl mx-auto flex gap-3">
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="Posez une question sur vos documents…"
+        disabled={loading}
+        className="flex-1 border border-ink-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400 disabled:opacity-60"
+      />
+      <button
+        type="submit"
+        disabled={loading || !input.trim()}
+        title="Envoyer"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-950 text-white transition-colors hover:bg-lime-500 hover:text-ink-950 disabled:opacity-30 disabled:hover:bg-ink-950 disabled:hover:text-white"
+      >
+        <ArrowUp size={18} strokeWidth={2.5} />
+      </button>
+    </form>
+  );
+
+  // Empty state: title + suggestions + input form centered together as
+  // one block (ChatGPT/Claude-style), not a title floating above a
+  // large empty gap with the input pinned to the bottom. Once a first
+  // message exists, the layout switches to a scrollable history with
+  // the input pinned as a sticky bottom bar.
+  if (messages.length === 0) {
+    return (
+      <div className="flex h-[calc(100vh-57px)] flex-col items-center justify-center px-4">
+        <div className="w-full max-w-xl text-center">
+          <span className="inline-flex mb-5">
+            <LogoMark className="w-12 h-12" />
+          </span>
+          <p className="font-display text-4xl font-bold text-ink-950 mb-3 tracking-tight">Comment puis-je vous aider ?</p>
+          <p className="text-sm text-ink-500 mb-8">
+            Interrogez les documents autorisés de votre entreprise.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left mb-8">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s.question}
+                onClick={(e) => send(e, s.question)}
+                disabled={loading}
+                className="flex items-start gap-3 bg-white border border-ink-100 rounded-lg p-4 hover:border-lime-400 hover:shadow-sm transition-all disabled:opacity-50"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-100 text-lime-700">
+                  <s.icon size={16} strokeWidth={2} />
+                </span>
+                <span>
+                  <span className="block text-[11px] font-bold uppercase tracking-wider text-lime-700 mb-1">
+                    {s.label}
+                  </span>
+                  <span className="block text-sm text-ink-950">{s.question}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          {inputForm}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-57px)]">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full">
-        {messages.length === 0 && (
-          <div className="text-center mt-16">
-            <span className="inline-flex mb-5">
-              <LogoMark className="w-12 h-12" />
-            </span>
-            <p className="font-display text-4xl font-bold text-ink-950 mb-3 tracking-tight">Comment puis-je vous aider ?</p>
-            <p className="text-sm text-ink-500 mb-10">
-              Interrogez les documents autorisés de votre entreprise.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left max-w-xl mx-auto">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s.question}
-                  onClick={(e) => send(e, s.question)}
-                  disabled={loading}
-                  className="flex items-start gap-3 bg-white border border-ink-100 rounded-lg p-4 hover:border-lime-400 hover:shadow-sm transition-all disabled:opacity-50"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-100 text-lime-700">
-                    <s.icon size={16} strokeWidth={2} />
-                  </span>
-                  <span>
-                    <span className="block text-[11px] font-bold uppercase tracking-wider text-lime-700 mb-1">
-                      {s.label}
-                    </span>
-                    <span className="block text-sm text-ink-950">{s.question}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[85%] ${msg.role === "user" ? "order-2" : ""}`}>
@@ -306,23 +337,7 @@ export default function ChatPage() {
 
       {/* Input */}
       <div className="border-t border-ink-100 bg-white px-4 py-4">
-        <form onSubmit={send} className="max-w-3xl mx-auto flex gap-3">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Posez une question sur vos documents…"
-            disabled={loading}
-            className="flex-1 border border-ink-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400 disabled:opacity-60"
-          />
-          <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            title="Envoyer"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-950 text-white transition-colors hover:bg-lime-500 hover:text-ink-950 disabled:opacity-30 disabled:hover:bg-ink-950 disabled:hover:text-white"
-          >
-            <ArrowUp size={18} strokeWidth={2.5} />
-          </button>
-        </form>
+        {inputForm}
       </div>
     </div>
   );
