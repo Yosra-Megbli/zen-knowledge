@@ -1,3 +1,4 @@
+import "./domPolyfill.ts";
 import { PDFParse } from "pdf-parse";
 import { IngestionError } from "../errors.ts";
 import type { ExtractionResult } from "./types.ts";
