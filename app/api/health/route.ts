@@ -5,5 +5,6 @@ export async function GET() {
     status: "ok",
     service: "zen-knowledge",
     timestamp: new Date().toISOString(),
+    commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
   });
 }
