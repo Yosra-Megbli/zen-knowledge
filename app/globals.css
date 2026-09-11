@@ -2,28 +2,29 @@
 @plugin "@tailwindcss/typography";
 
 /*
- * ZEN Knowledge design tokens — inspired by ZEN Group's retail/home &
- * lifestyle branding (warmth, craft, proximity), not a clone of any
- * specific ZEN visual asset. Replaces the generic indigo/gray
- * "SaaS starter" palette with a warm clay accent on an ink/cream base.
+ * ZEN Knowledge design tokens — matches the visual system of the ZEN
+ * Group recruitment test portal (groupzen.com.tn/recruitment): dark
+ * near-black header/blocks, white surfaces, a single lime accent, and
+ * a geometric sans-serif. Consistency with the brief's own host page,
+ * not a clone of ZEN's public consumer-facing retail branding.
  */
 @theme {
-  --color-ink-950: #211a14;
-  --color-ink-900: #2c2119;
-  --color-ink-700: #4a3b30;
-  --color-ink-500: #7a6a5a;
-  --color-ink-300: #b8ab9c;
-  --color-ink-100: #ece5db;
+  --color-ink-950: #12160f;
+  --color-ink-900: #1a1f16;
+  --color-ink-700: #3d453a;
+  --color-ink-500: #6b7268;
+  --color-ink-300: #9ba196;
+  --color-ink-100: #e4e6e0;
 
-  --color-cream-50: #faf6f0;
-  --color-cream-100: #f3ecdf;
+  --color-paper-50: #ffffff;
+  --color-paper-100: #f5f6f3;
 
-  --color-clay-50: #fbf1ea;
-  --color-clay-100: #f5ddcc;
-  --color-clay-400: #d98a5a;
-  --color-clay-500: #c2683a;
-  --color-clay-600: #a8532c;
-  --color-clay-700: #874025;
+  --color-lime-50: #f3fbd9;
+  --color-lime-100: #e4f7a8;
+  --color-lime-400: #d4f168;
+  --color-lime-500: #c7eb3d;
+  --color-lime-600: #a8c92a;
+  --color-lime-700: #7c9420;
 
-  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-display: var(--font-space-grotesk), "Space Grotesk", sans-serif;
 }

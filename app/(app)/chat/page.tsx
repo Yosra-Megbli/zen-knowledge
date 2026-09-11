@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { LogoMark } from "../../components/Logo.tsx";
 
 interface Citation {
   chunkId: string;
@@ -129,8 +130,8 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full">
         {messages.length === 0 && (
           <div className="text-center mt-16">
-            <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-clay-50 text-clay-500 font-display text-xl mb-4">
-              Z
+            <span className="inline-flex mb-4">
+              <LogoMark className="w-12 h-12" />
             </span>
             <p className="font-display text-2xl font-semibold text-ink-500 mb-2">Comment puis-je vous aider ?</p>
             <p className="text-sm text-ink-300 mb-8">
@@ -142,9 +143,9 @@ export default function ChatPage() {
                   key={s.question}
                   onClick={(e) => send(e, s.question)}
                   disabled={loading}
-                  className="bg-white border border-ink-100 rounded-xl p-4 hover:border-clay-300 hover:shadow-sm transition-all disabled:opacity-50"
+                  className="bg-white border border-ink-100 rounded-xl p-4 hover:border-lime-300 hover:shadow-sm transition-all disabled:opacity-50"
                 >
-                  <p className="text-xs font-medium text-clay-600 mb-1">
+                  <p className="text-xs font-medium text-lime-600 mb-1">
                     {s.icon} {s.label}
                   </p>
                   <p className="text-sm text-ink-700">{s.question}</p>
@@ -159,7 +160,7 @@ export default function ChatPage() {
               <div
                 className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
                   msg.role === "user"
-                    ? "bg-clay-500 text-white rounded-br-sm"
+                    ? "bg-ink-950 text-white rounded-br-sm"
                     : msg.refusal
                     ? "bg-amber-50 border border-amber-200 text-amber-800 rounded-bl-sm"
                     : "bg-white border border-ink-100 text-ink-900 rounded-bl-sm shadow-sm"
@@ -180,7 +181,7 @@ export default function ChatPage() {
                         <div className="flex items-center justify-between gap-2 px-3 py-2">
                           <button
                             onClick={() => setExpanded(expanded === key ? null : key)}
-                            className="flex-1 text-left font-medium text-ink-700 truncate hover:text-clay-600 transition-colors"
+                            className="flex-1 text-left font-medium text-ink-700 truncate hover:text-lime-600 transition-colors"
                           >
                             [{c.sourceIndex}] {c.documentTitle}
                           </button>
@@ -192,7 +193,7 @@ export default function ChatPage() {
                               href={fileUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-clay-500 hover:text-clay-700 font-medium transition-colors"
+                              className="text-lime-500 hover:text-lime-700 font-medium transition-colors"
                               title="Ouvrir le document"
                             >
                               ↗
@@ -247,9 +248,9 @@ export default function ChatPage() {
           <div className="flex justify-start">
             <div className="bg-white border border-ink-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
               <div className="flex gap-1 items-center h-4">
-                <span className="w-1.5 h-1.5 bg-clay-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                <span className="w-1.5 h-1.5 bg-clay-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                <span className="w-1.5 h-1.5 bg-clay-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                <span className="w-1.5 h-1.5 bg-lime-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 bg-lime-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 bg-lime-400 rounded-full animate-bounce [animation-delay:300ms]" />
               </div>
             </div>
           </div>
@@ -265,12 +266,12 @@ export default function ChatPage() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Posez une question sur vos documents…"
             disabled={loading}
-            className="flex-1 border border-ink-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-clay-400 disabled:opacity-60"
+            className="flex-1 border border-ink-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400 disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="bg-clay-500 hover:bg-clay-600 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            className="bg-ink-950 hover:bg-ink-900 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
           >
             Envoyer
           </button>

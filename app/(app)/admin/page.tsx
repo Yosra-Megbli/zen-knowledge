@@ -81,7 +81,7 @@ export default function AdminPage() {
           <h2 className="font-medium text-ink-700">Activité récente</h2>
         </div>
         <table className="w-full text-sm">
-          <thead className="bg-cream-100 border-b border-ink-100">
+          <thead className="bg-paper-100 border-b border-ink-100">
             <tr>
               <th className="text-left px-5 py-3 font-medium text-ink-300">Action</th>
               <th className="text-left px-5 py-3 font-medium text-ink-300">Modèle</th>
@@ -94,7 +94,7 @@ export default function AdminPage() {
             {recent.map((r, i) => {
               const a = ACTION_LABELS[r.action] ?? { label: r.action, color: "bg-ink-100 text-ink-500" };
               return (
-                <tr key={i} className="hover:bg-cream-100">
+                <tr key={i} className="hover:bg-paper-100">
                   <td className="px-5 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${a.color}`}>{a.label}</span>
                   </td>

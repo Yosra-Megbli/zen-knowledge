@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Fraunces } from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const fraunces = Fraunces({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-fraunces",
-  weight: ["500", "600"],
+  variable: "--font-space-grotesk",
+  weight: ["500", "600", "700"],
   display: "swap",
 });
 
@@ -18,8 +18,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr" className={fraunces.variable}>
-      <body className="bg-cream-50 text-ink-900 antialiased">{children}</body>
+    <html lang="fr" className={spaceGrotesk.variable}>
+      <body className="bg-paper-100 text-ink-900 antialiased">{children}</body>
     </html>
   );
 }
