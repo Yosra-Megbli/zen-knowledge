@@ -21,6 +21,12 @@ import {
 // "next/server", which only resolves inside Next.js's own bundler).
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
+  // Set directly rather than relying solely on the AUTH_TRUST_HOST env
+  // var: on Vercel this host (zen-knowledge.vercel.app / any preview
+  // deployment) is always ours, so trusting the request's Host header to
+  // build callback URLs is safe here regardless of whether the env var
+  // reaches the runtime correctly.
+  trustHost: true,
   // TEMPORARY diagnostic logging — makes Auth.js print the real
   // underlying error to the Vercel function logs (findable via the
   // "AUTH_DEBUG_ERROR" prefix) instead of only the generic client-facing
