@@ -32,6 +32,9 @@ env/
 .eslintcache
 .parcel-cache/
 
+# Local file storage (uploaded documents) — never committed
+.storage/
+
 # Logs
 logs/
 *.log

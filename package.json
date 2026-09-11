@@ -17,6 +17,7 @@
     "test:auth": "node --env-file-if-exists=.env.local --test tests/unit/auth-callbacks.test.ts",
     "test:rag": "node --env-file-if-exists=.env.local --test tests/integration/rag/*.test.ts",
     "test:auth-http": "node --test tests/integration/auth/http-flow.test.mjs",
+    "test:ingestion": "node --env-file-if-exists=.env.local --test tests/unit/ingestion/*.test.ts tests/integration/ingestion/pipeline.test.ts",
     "test:phase3": "npm run test:rls && npm run test:embeddings && npm run test:auth && npm run test:rag"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "bcryptjs": "^3.0.3",
     "next": "^16.3.4",
     "next-auth": "^5.0.0-beta.32",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.13.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
