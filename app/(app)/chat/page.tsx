@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
+import ReactMarkdown from "react-markdown";
 import { LogoMark } from "../../components/Logo.tsx";
 
 interface Citation {
@@ -117,11 +118,49 @@ export default function ChatPage() {
   // extractCitations(): the model doesn't always emit plain ASCII
   // "[SOURCE n]" (observed fullwidth CJK brackets and stray zero-width
   // characters from the real Groq/gpt-oss-120b provider), so this must
-  // normalize the same variants or the raw marker leaks into the
-  // visible answer text.
-  function renderAnswer(content: string) {
-    const normalized = content.replace(/[​-‍﻿]/g, "");
-    return normalized.replace(/[[［【]\s*SOURCE\s+(\d+)\s*[\]］】]/gi, (_, n) => `[${n}]`);
+  // normalize the same variants before matching, or the raw marker
+  // leaks into the visible answer text.
+  //
+  // Renders markdown (the model reliably emits "**bold**" etc., which
+  // was previously shown as literal asterisks) and turns each [n]
+  // marker into a real clickable citation — not just the source card
+  // below the bubble — opening the exact document version at the
+  // cited page, per "chaque citation ouvre le bon document au passage
+  // utilisé".
+  function renderAnswer(content: string, citations: Citation[]) {
+    const normalized = content
+      .replace(/[​-‍﻿]/g, "")
+      .replace(/[[［【]\s*SOURCE\s+(\d+)\s*[\]］】]/gi, (_, n) => `[${n}]`);
+
+    const parts = normalized.split(/(\[\d+\])/g);
+    return parts.map((part, i) => {
+      const match = part.match(/^\[(\d+)\]$/);
+      if (!match) {
+        return (
+          <ReactMarkdown key={i} allowedElements={["strong", "em", "code"]} unwrapDisallowed>
+            {part}
+          </ReactMarkdown>
+        );
+      }
+      const citation = citations.find((c) => c.sourceIndex === Number(match[1]));
+      // A citation index the model mentioned but that extractCitations()
+      // didn't keep (fabricated / out of range) renders as plain text,
+      // never as a button pointing nowhere.
+      if (!citation) return <Fragment key={i}>{part}</Fragment>;
+      const fileUrl = `/api/documents/${citation.documentVersionId}/file${citation.pageNumber ? `#page=${citation.pageNumber}` : ""}`;
+      return (
+        <a
+          key={i}
+          href={fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`${citation.documentTitle} — v${citation.versionNumber}${citation.pageNumber ? `, page ${citation.pageNumber}` : ""}`}
+          className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-lime-100 px-1 align-super text-[10px] font-bold text-lime-700 no-underline transition-colors hover:bg-lime-400"
+        >
+          {match[1]}
+        </a>
+      );
+    });
   }
 
   return (
@@ -166,7 +205,7 @@ export default function ChatPage() {
                     : "bg-white border border-ink-100 text-ink-900 rounded-bl-sm shadow-sm"
                 }`}
               >
-                {msg.role === "assistant" ? renderAnswer(msg.content) : msg.content}
+                {msg.role === "assistant" ? renderAnswer(msg.content, msg.citations ?? []) : msg.content}
               </div>
 
               {/* Citations */}
