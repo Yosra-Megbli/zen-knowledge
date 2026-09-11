@@ -1,0 +1,271 @@
+{
+  "name": "W3 — ZEN Knowledge Obsolescence",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 8 * * *" }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 08:00 — Review Scan",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.ZEN_APP_URL }}/api/n8n/review-due?warningDays=7&graceDays=30",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-review-due",
+      "name": "Call ZEN Review-Due API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "zen-webhook-secret",
+          "name": "ZEN Webhook Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "scan-status-check",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "check-scan-success",
+      "name": "Scan OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconsole.error('W3 review-due scan failed', res.statusCode, res.body);\nreturn [{ json: { ok: false, statusCode: res.statusCode, error: res.body?.error ?? 'unknown' } }];"
+      },
+      "id": "log-scan-error",
+      "name": "Log Scan Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan out the scan result into one n8n item per document, so each\n// can be routed independently below (notify vs unpublish).\nconst res = $input.first().json;\nconst body = res.body ?? res;\nconst items = body.items ?? [];\nreturn items.map((row) => ({ json: row }));"
+      },
+      "id": "split-items",
+      "name": "Split Documents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "classification-check",
+              "leftValue": "={{ $json.classification }}",
+              "rightValue": "unpublish",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "classify-route",
+      "name": "Past Grace Period?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZEN_APP_URL }}/api/n8n/unpublish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "documentId", "value": "={{ $json.document_id }}" }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-unpublish",
+      "name": "Call ZEN Unpublish API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 140],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "zen-webhook-secret",
+          "name": "ZEN Webhook Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ZEN_APP_URL }}/api/n8n/review-due/notify",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "documentId", "value": "={{ $json.document_id }}" },
+            { "name": "reviewDate", "value": "={{ $json.review_date }}" },
+            { "name": "classification", "value": "={{ $json.classification }}" }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-notify",
+      "name": "Call ZEN Notify API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 320],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "zen-webhook-secret",
+          "name": "ZEN Webhook Secret"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const doc = $('Past Grace Period?').first().json;\nconst res = $input.first().json;\nreturn [{\n  json: {\n    action: 'unpublish',\n    documentId: doc.document_id,\n    title: doc.title,\n    ok: res.statusCode === 200,\n    httpStatus: res.statusCode,\n    result: res.body\n  }\n}];"
+      },
+      "id": "build-unpublish-result",
+      "name": "Build Unpublish Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "const doc = $('Past Grace Period?').first().json;\nconst res = $input.first().json;\nreturn [{\n  json: {\n    action: 'notify',\n    documentId: doc.document_id,\n    title: doc.title,\n    classification: doc.classification,\n    ok: res.statusCode === 200,\n    httpStatus: res.statusCode,\n    result: res.body\n  }\n}];"
+      },
+      "id": "build-notify-result",
+      "name": "Build Notify Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 320]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1780, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all().map((i) => i.json);\nconst notified = all.filter((r) => r.action === 'notify');\nconst unpublished = all.filter((r) => r.action === 'unpublish');\nconst failed = all.filter((r) => !r.ok);\n\nconsole.log(`W3 run complete: ${notified.length} notified, ${unpublished.length} unpublished, ${failed.length} failed`);\n\nreturn [{\n  json: {\n    runAt: new Date().toISOString(),\n    totalProcessed: all.length,\n    notifiedCount: notified.length,\n    unpublishedCount: unpublished.length,\n    failedCount: failed.length,\n    failures: failed\n  }\n}];"
+      },
+      "id": "summarize-run",
+      "name": "Summarize Run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 220]
+    }
+  ],
+  "connections": {
+    "Daily 08:00 — Review Scan": {
+      "main": [[{ "node": "Call ZEN Review-Due API", "type": "main", "index": 0 }]]
+    },
+    "Call ZEN Review-Due API": {
+      "main": [[{ "node": "Scan OK?", "type": "main", "index": 0 }]]
+    },
+    "Scan OK?": {
+      "main": [
+        [{ "node": "Split Documents", "type": "main", "index": 0 }],
+        [{ "node": "Log Scan Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Documents": {
+      "main": [[{ "node": "Past Grace Period?", "type": "main", "index": 0 }]]
+    },
+    "Past Grace Period?": {
+      "main": [
+        [{ "node": "Call ZEN Unpublish API", "type": "main", "index": 0 }],
+        [{ "node": "Call ZEN Notify API", "type": "main", "index": 0 }]
+      ]
+    },
+    "Call ZEN Unpublish API": {
+      "main": [[{ "node": "Build Unpublish Result", "type": "main", "index": 0 }]]
+    },
+    "Call ZEN Notify API": {
+      "main": [[{ "node": "Build Notify Result", "type": "main", "index": 0 }]]
+    },
+    "Build Unpublish Result": {
+      "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]]
+    },
+    "Build Notify Result": {
+      "main": [[{ "node": "Merge Results", "type": "main", "index": 1 }]]
+    },
+    "Merge Results": {
+      "main": [[{ "node": "Summarize Run", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "versionId": "w3-zen-obsolescence-v1",
+  "triggerCount": 0,
+  "tags": [{ "name": "zen-knowledge" }, { "name": "obsolescence" }, { "name": "W3" }]
+}
