@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 interface Document {
   id: string;
@@ -43,6 +43,9 @@ export default function DocumentsPage() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -64,6 +67,27 @@ export default function DocumentsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDocs();
   }, [fetchDocs]);
+
+  // Client-side only — /api/documents/list already scopes results to
+  // the caller's company/permissions via RLS; this just narrows what's
+  // already been authorized to fetch, never a second access check.
+  const filteredDocs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return docs.filter((doc) => {
+      if (q && !doc.title.toLowerCase().includes(q) && !(doc.description ?? "").toLowerCase().includes(q)) {
+        return false;
+      }
+      const status = doc.latest_status ?? doc.status;
+      if (statusFilter !== "all" && status !== statusFilter) return false;
+      if (visibilityFilter !== "all" && doc.visibility !== visibilityFilter) return false;
+      return true;
+    });
+  }, [docs, search, statusFilter, visibilityFilter]);
+
+  const statusOptions = useMemo(
+    () => Array.from(new Set(docs.map((d) => d.latest_status ?? d.status))).sort(),
+    [docs]
+  );
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -117,10 +141,46 @@ export default function DocumentsPage() {
         </button>
       </div>
 
+      {!loading && docs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un document…"
+            className="flex-1 min-w-[200px] border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-clay-400"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-clay-400"
+          >
+            <option value="all">Tous les statuts</option>
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            value={visibilityFilter}
+            onChange={(e) => setVisibilityFilter(e.target.value)}
+            className="border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-clay-400"
+          >
+            <option value="all">Toutes les visibilités</option>
+            {Object.entries(VISIBILITY_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <span className="text-xs text-ink-300 whitespace-nowrap">
+            {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center text-ink-300 py-20">Chargement…</div>
       ) : docs.length === 0 ? (
         <div className="text-center text-ink-300 py-20">Aucun document disponible.</div>
+      ) : filteredDocs.length === 0 ? (
+        <div className="text-center text-ink-300 py-20">Aucun document ne correspond à ces critères.</div>
       ) : (
         <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
           <div className="overflow-x-auto">
@@ -137,7 +197,7 @@ export default function DocumentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-100">
-              {docs.map((doc) => (
+              {filteredDocs.map((doc) => (
                 <tr key={doc.id} className="hover:bg-cream-100 transition-colors">
                   <td className="px-4 py-3">
                     <p className="font-medium text-ink-950">{doc.title}</p>
