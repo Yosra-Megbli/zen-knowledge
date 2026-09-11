@@ -205,9 +205,13 @@ propriété de sécurité supplémentaire utile ici.
 
 | Nom | Type | Valeur |
 |-----|------|--------|
-| `ZEN_APP_URL` | Env var n8n | URL de l'app Next.js (partagée avec W1) |
+| `ZEN_APP_URL` | Env var n8n | URL de l'app Next.js (partagée avec W1) — déjà définie dans `docker-compose.yml` |
 | `ZEN Webhook Secret` | Credential n8n (HTTP Header Auth) | `N8N_WEBHOOK_SECRET` (partagé avec W1) |
 | `N8N_WEBHOOK_SECRET` | Env var Next.js | Secret partagé (min 32 chars) |
+
+Voir la section "Pièges rencontrés" dans `n8n/docs/W1-ingestion.md` —
+`N8N_BLOCK_ENV_ACCESS_IN_NODE` et le champ `"id"` requis s'appliquent
+également à ce workflow.
 
 ## Tests automatisés
 

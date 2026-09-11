@@ -151,6 +151,20 @@ l'appelant est le n8n de confiance, pas un client arbitraire.
 
 | Nom | Type | Valeur |
 |-----|------|--------|
-| `ZEN_APP_URL` | Env var n8n | URL de l'app Next.js |
+| `ZEN_APP_URL` | Env var n8n | URL de l'app Next.js — déjà définie dans `docker/docker-compose.yml` (service `n8n`), pas besoin de la saisir manuellement |
 | `ZEN Webhook Secret` | Credential n8n (HTTP Header Auth) | `N8N_WEBHOOK_SECRET` |
 | `N8N_WEBHOOK_SECRET` | Env var Next.js | Secret partagé (min 32 chars) |
+
+## Pièges rencontrés en testant réellement le workflow (n8n 2.38.6)
+
+- **`access to env vars denied`** — n8n bloque par défaut l'accès à
+  `$env` depuis les expressions des nœuds (sécurité). Les URL des
+  nœuds HTTP Request de W1/W3 utilisent `$env.ZEN_APP_URL`. Fixé via
+  `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` dans `docker-compose.yml`
+  (déjà en place).
+- **Import CLI (`n8n import:workflow`) échoue avec
+  `SQLITE_CONSTRAINT: NOT NULL constraint failed: workflow_entity.id`**
+  — cette version de n8n exige un champ `"id"` explicite au niveau
+  racine du JSON exporté (contrairement à des versions plus anciennes
+  qui l'auto-généraient). Les fichiers `W1-ingestion.json` et
+  `W3-obsolescence.json` en contiennent déjà un.
