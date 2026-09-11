@@ -11,7 +11,15 @@ const nextConfig: NextConfig = {
   // package external tells Next.js to leave it as a real
   // node_modules import resolved at runtime instead of tracing/
   // inlining it.
-  serverExternalPackages: ["@huggingface/transformers"],
+  // pdf-parse (used for PDF text extraction during ingestion) depends
+  // on @napi-rs/canvas, a native addon with the same per-platform
+  // shared-library problem as onnxruntime-node below — its Linux x64
+  // binary was never traced into the deployed function, crashing
+  // every request to /api/n8n/ingest and /api/documents/upload at
+  // import time (lib/ingestion/extract/pdf.ts imports pdf-parse
+  // unconditionally, even for a .txt upload — extract/index.ts
+  // doesn't lazy-load per file type).
+  serverExternalPackages: ["@huggingface/transformers", "pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
   // Root cause confirmed from the actual Vercel function log:
   // "libonnxruntime.so.1: cannot open shared object file". Loading
   // @huggingface/transformers unconditionally does
@@ -29,8 +37,14 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/rag/retrieve": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"],
     "/api/rag/answer": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"],
-    "/api/documents/upload": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"],
-    "/api/n8n/ingest": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"],
+    "/api/documents/upload": [
+      "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+    ],
+    "/api/n8n/ingest": [
+      "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+    ],
   },
 };
 
