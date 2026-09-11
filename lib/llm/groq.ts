@@ -5,7 +5,7 @@ import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from ".
 // GROQ_API_KEY is read here and ONLY here. It is never logged, never
 // returned in a response, never passed to any other module.
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
 const DEFAULT_MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS ?? 1024);
 const DEFAULT_TEMPERATURE = Number(process.env.LLM_TEMPERATURE ?? 0);
 const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS ?? 30_000);
