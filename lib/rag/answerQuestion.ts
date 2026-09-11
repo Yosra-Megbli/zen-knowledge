@@ -176,15 +176,25 @@ export async function answerQuestion(ctx: AuthContext, question: string): Promis
  * fabricated index is silently dropped (defense in depth: the LLM
  * cannot invent a citation that references a chunk it never saw).
  */
-function extractCitations(
+export function extractCitations(
   answer: string,
   sources: SourceBlock[],
   chunks: RetrievedChunk[]
 ): RagCitation[] {
   const mentioned = new Set<number>();
-  const pattern = /\[SOURCE\s+(\d+)\]/gi;
+  // The model is instructed to emit ASCII "[SOURCE n]", but in practice
+  // it sometimes substitutes fullwidth CJK brackets (U+3010/U+3011,
+  // U+FF3B/U+FF3D) or inserts a zero-width character (U+200B-200D,
+  // U+FEFF) right after the opening bracket — observed empirically
+  // against the real Groq/gpt-oss-120b provider, not just the
+  // ASCII-only mock used in tests. Strip invisible characters and
+  // accept any of the common bracket variants so a citation isn't
+  // silently lost to formatting drift the model doesn't fully control.
+  const ZERO_WIDTH = /[​-‍﻿]/g;
+  const normalized = answer.replace(ZERO_WIDTH, "");
+  const pattern = /[[［【]\s*SOURCE\s+(\d+)\s*[\]］】]/gi;
   let match: RegExpExecArray | null;
-  while ((match = pattern.exec(answer)) !== null) {
+  while ((match = pattern.exec(normalized)) !== null) {
     mentioned.add(Number(match[1]));
   }
 
