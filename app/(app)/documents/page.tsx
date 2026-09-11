@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { ExternalLink } from "lucide-react";
 
 interface Document {
   id: string;
@@ -22,6 +23,13 @@ const VISIBILITY_LABELS: Record<string, string> = {
   company: "Entreprise",
   department: "Département",
   restricted: "Restreint",
+};
+
+// "restricted" gets a visually distinct (amber) badge so
+// confidentiality is legible at a glance in the table, not just
+// identical styling to the other two (non-sensitive) visibilities.
+const VISIBILITY_COLORS: Record<string, string> = {
+  restricted: "bg-amber-50 text-amber-700 border border-amber-200",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -205,8 +213,14 @@ export default function DocumentsPage() {
                       <p className="text-xs text-ink-300 truncate max-w-xs">{doc.description}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-ink-500">
-                    {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                  <td className="px-4 py-3">
+                    {VISIBILITY_COLORS[doc.visibility] ? (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility]}`}>
+                        {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                      </span>
+                    ) : (
+                      <span className="text-ink-500">{VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[doc.latest_status ?? doc.status] ?? "bg-ink-100 text-ink-500"}`}>
@@ -235,6 +249,16 @@ export default function DocumentsPage() {
                       </button>
                     ) : doc.latest_status === "failed" ? (
                       <span className="text-xs text-red-500">Échec du traitement</span>
+                    ) : doc.latest_version_id ? (
+                      <a
+                        href={`/api/documents/${doc.latest_version_id}/file`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
+                        title="Voir le document"
+                      >
+                        Voir <ExternalLink size={12} strokeWidth={2} />
+                      </a>
                     ) : (
                       <span className="text-xs text-ink-300">—</span>
                     )}

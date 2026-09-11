@@ -17,7 +17,7 @@
   --color-ink-100: #e4e6e0;
 
   --color-paper-50: #ffffff;
-  --color-paper-100: #f5f6f3;
+  --color-paper-100: #faf9f3;
 
   --color-lime-50: #f3fbd9;
   --color-lime-100: #e4f7a8;
@@ -27,4 +27,14 @@
   --color-lime-700: #7c9420;
 
   --font-display: var(--font-space-grotesk), "Space Grotesk", sans-serif;
+}
+
+/* Chrome's default autofill background (pale blue) clashes with the
+   palette on every input — override it to stay white with ink text. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  -webkit-text-fill-color: var(--color-ink-900);
+  transition: background-color 9999s ease-out;
 }

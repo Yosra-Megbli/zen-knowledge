@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, Fragment } from "react";
 import ReactMarkdown from "react-markdown";
-import { Package, Users, Truck, Lock, ExternalLink, ThumbsUp, ThumbsDown, type LucideIcon } from "lucide-react";
+import { Package, Users, Truck, Lock, ExternalLink, ThumbsUp, ThumbsDown, ArrowUp, type LucideIcon } from "lucide-react";
 import { LogoMark } from "../../components/Logo.tsx";
 
 interface Citation {
@@ -317,9 +317,10 @@ export default function ChatPage() {
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="bg-ink-950 hover:bg-ink-900 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            title="Envoyer"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-950 text-white transition-colors hover:bg-lime-500 hover:text-ink-950 disabled:opacity-30 disabled:hover:bg-ink-950 disabled:hover:text-white"
           >
-            Envoyer
+            <ArrowUp size={18} strokeWidth={2.5} />
           </button>
         </form>
       </div>

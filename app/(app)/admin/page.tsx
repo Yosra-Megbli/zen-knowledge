@@ -14,6 +14,15 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   rag_error: { label: "Erreur", color: "bg-red-100 text-red-700" },
 };
 
+// "openai/gpt-oss-120b" -> "gpt-oss-120b" — the provider prefix is
+// noise repeated on every row; the model name itself is what varies
+// and what's worth scanning at a glance.
+function shortModelName(model: string | null): string {
+  if (!model) return "—";
+  const slash = model.lastIndexOf("/");
+  return slash === -1 ? model : model.slice(slash + 1);
+}
+
 export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,7 +107,7 @@ export default function AdminPage() {
                   <td className="px-5 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${a.color}`}>{a.label}</span>
                   </td>
-                  <td className="px-5 py-3 text-ink-500 text-xs">{r.model ?? "—"}</td>
+                  <td className="px-5 py-3 text-ink-500 text-xs">{shortModelName(r.model)}</td>
                   <td className="px-5 py-3 text-ink-500 text-xs">
                     {r.latency_ms ? `${(r.latency_ms / 1000).toFixed(1)}s` : "—"}
                   </td>
