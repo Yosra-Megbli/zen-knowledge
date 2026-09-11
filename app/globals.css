@@ -1,2 +1,29 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+/*
+ * ZEN Knowledge design tokens — inspired by ZEN Group's retail/home &
+ * lifestyle branding (warmth, craft, proximity), not a clone of any
+ * specific ZEN visual asset. Replaces the generic indigo/gray
+ * "SaaS starter" palette with a warm clay accent on an ink/cream base.
+ */
+@theme {
+  --color-ink-950: #211a14;
+  --color-ink-900: #2c2119;
+  --color-ink-700: #4a3b30;
+  --color-ink-500: #7a6a5a;
+  --color-ink-300: #b8ab9c;
+  --color-ink-100: #ece5db;
+
+  --color-cream-50: #faf6f0;
+  --color-cream-100: #f3ecdf;
+
+  --color-clay-50: #fbf1ea;
+  --color-clay-100: #f5ddcc;
+  --color-clay-400: #d98a5a;
+  --color-clay-500: #c2683a;
+  --color-clay-600: #a8532c;
+  --color-clay-700: #874025;
+
+  --font-display: var(--font-fraunces), Georgia, serif;
+}
