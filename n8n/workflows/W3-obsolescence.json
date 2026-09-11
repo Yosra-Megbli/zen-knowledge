@@ -196,9 +196,7 @@
     },
     {
       "parameters": {
-        "mode": "combine",
-        "combinationMode": "multiplex",
-        "options": {}
+        "mode": "append"
       },
       "id": "merge-results",
       "name": "Merge Results",
