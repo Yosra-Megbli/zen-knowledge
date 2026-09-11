@@ -12,6 +12,7 @@
     "db:migrate": "node db/migrate.mjs",
     "db:reset": "node db/reset.mjs",
     "db:seed": "node db/seed.mjs",
+    "db:seed-demo": "node --env-file-if-exists=.env.local scripts/seed-demo-dataset.mjs",
     "test:rls": "node --test tests/integration/rls/*.test.mjs",
     "test:embeddings": "node --env-file-if-exists=.env.local --test tests/unit/embeddings.test.ts",
     "test:auth": "node --env-file-if-exists=.env.local --test tests/unit/auth-callbacks.test.ts",

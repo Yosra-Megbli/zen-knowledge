@@ -1,0 +1,52 @@
+Procédure de gestion des stocks entrepôt — Département Logistique
+ZEN Retail Tunisia — Document interne Logistique
+
+1. Objectif
+
+Cette procédure encadre la réception, le stockage et la sortie de
+marchandises dans l'entrepôt central de Ben Arous, qui approvisionne les
+12 magasins ZEN Retail Tunisia.
+
+2. Réception des marchandises
+
+Tout arrivage doit être contrôlé dans les 24 heures suivant la livraison.
+Le contrôle porte sur : la conformité de la quantité par rapport au bon de
+commande, l'état des emballages, et la vérification des dates de
+péremption pour les produits concernés. Tout écart supérieur à 2 % entre
+la quantité livrée et la quantité commandée doit être signalé au
+fournisseur sous 48 heures.
+
+3. Stockage
+
+Les produits sont classés par catégorie (textile, électroménager,
+cosmétique, alimentaire) et par zone de température si nécessaire. Les
+allées A à D sont réservées aux produits à rotation rapide, les allées E
+à H aux produits saisonniers.
+
+4. Seuil de réapprovisionnement
+
+Le seuil d'alerte de réapprovisionnement est fixé à 15 % du stock
+maximum pour les produits à forte rotation, et à 25 % pour les produits
+saisonniers. Une commande de réapprovisionnement automatique est
+déclenchée par l'ERP lorsque ce seuil est atteint.
+
+5. Inventaire
+
+Un inventaire tournant est réalisé chaque semaine sur 10 % du stock,
+selon un calendrier rotatif couvrant l'intégralité de l'entrepôt en 10
+semaines. Un inventaire complet est réalisé deux fois par an, en janvier
+et en juillet.
+
+6. Sortie de marchandises vers les magasins
+
+Les commandes des magasins sont préparées sous 48 heures ouvrées et
+livrées deux fois par semaine (mardi et vendredi) par le transporteur
+partenaire. Toute commande urgente peut être traitée sous 24 heures avec
+validation du responsable d'entrepôt.
+
+7. Sécurité et accès
+
+L'accès à l'entrepôt est réservé au personnel logistique muni d'un badge.
+Les visiteurs doivent être accompagnés en permanence et porter un
+équipement de protection individuelle (chaussures de sécurité obligatoires
+au-delà de la zone de réception).
