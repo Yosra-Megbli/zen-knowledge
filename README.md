@@ -10,6 +10,39 @@ visibilité, versioning documentaire, citations vérifiables,
 obsolescence automatique, et outils d'administration — le tout à
 **budget 0€**.
 
+## 🔑 Tester en 2 minutes
+
+**URL** : https://zen-knowledge.vercel.app/login — la page propose des
+boutons de connexion rapide pour les comptes ci-dessous (un clic,
+aucun mot de passe à copier).
+
+| Entreprise | Rôle | Email | Mot de passe |
+|---|---|---|---|
+| ZEN Retail Tunisia | Admin | `admin@zenretail.example` | `ZenDemo2026!` |
+| ZEN Retail Tunisia | Employé | `employee@zenretail.example` | `ZenDemo2026!` |
+| ZEN Home & Lifestyle | Admin | `admin@zenhomelifestyle.example` | `ZenDemo2026!` |
+
+### Preuve d'isolation — le test croisé
+
+Le "Rapport financier confidentiel — T4 2025" existe réellement en
+base, publié chez **ZEN Home & Lifestyle** uniquement.
+
+1. Connectez-vous en **ZEN Retail Tunisia** (admin) → demandez *"Quel
+   est le chiffre d'affaires du dernier trimestre ?"* → **refus**,
+   alors que l'information existe en base — chez l'autre entreprise.
+2. Reconnectez-vous en **ZEN Home & Lifestyle** (admin) → posez
+   exactement la même question → réponse sourcée, citation cliquable.
+3. Connectez-vous en **ZEN Retail Tunisia — Employé** → demandez la
+   grille salariale 2026 (document `restricted`, propre à sa société) →
+   **refus** — prouve que le filtrage descend jusqu'au rôle, pas
+   seulement à l'entreprise.
+
+Dans les trois cas de refus, le message est strictement identique
+(`"I don't have enough authorized sources to answer this question."`)
+— qu'il s'agisse d'une question hors sujet, d'un document d'une autre
+entreprise ou d'un document restreint. Le refus ne révèle jamais
+*pourquoi*, donc jamais si le document existe ailleurs.
+
 ## Statut
 
 Fonctionnalité complète de bout en bout :

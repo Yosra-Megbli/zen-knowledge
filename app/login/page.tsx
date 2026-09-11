@@ -12,13 +12,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function doLogin(loginEmail: string, loginPassword: string) {
     setError(null);
     setLoading(true);
     const res = await signIn("credentials", {
-      email,
-      password,
+      email: loginEmail,
+      password: loginPassword,
       redirect: false,
     });
     setLoading(false);
@@ -28,6 +27,18 @@ export default function LoginPage() {
       router.push("/chat");
     }
   }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await doLogin(email, password);
+  }
+
+  const DEMO_PASSWORD = "ZenDemo2026!";
+  const QUICK_LOGINS = [
+    { label: "ZEN Retail Tunisia", role: "Admin", email: "admin@zenretail.example" },
+    { label: "ZEN Home & Lifestyle", role: "Admin", email: "admin@zenhomelifestyle.example" },
+    { label: "ZEN Retail Tunisia", role: "Employé", email: "employee@zenretail.example" },
+  ];
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-paper-50">
@@ -77,9 +88,33 @@ export default function LoginPage() {
             {loading ? "Connexion…" : "Se connecter"}
           </button>
         </form>
-        <p className="text-center text-xs text-ink-300 mt-6">
-          Démo : admin@acmecorp.example / ZenDemo2026!
-        </p>
+        <div className="mt-6">
+          <p className="text-center text-xs font-medium text-ink-300 uppercase tracking-wide mb-2">
+            Connexion rapide — comptes de démo
+          </p>
+          <div className="grid grid-cols-1 gap-2">
+            {QUICK_LOGINS.map((q) => (
+              <button
+                key={q.email}
+                type="button"
+                disabled={loading}
+                onClick={() => doLogin(q.email, DEMO_PASSWORD)}
+                className="flex items-center justify-between bg-white border border-ink-100 rounded-lg px-3 py-2 text-left text-xs hover:border-lime-400 hover:shadow-sm transition-all disabled:opacity-50"
+              >
+                <span>
+                  <span className="block font-semibold text-ink-950">{q.label}</span>
+                  <span className="text-ink-300">{q.email}</span>
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-lime-100 text-lime-700 font-medium">
+                  {q.role}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-xs text-ink-300 mt-3">
+            Mot de passe pour tous les comptes : {DEMO_PASSWORD}
+          </p>
+        </div>
       </div>
     </div>
   );
