@@ -28,6 +28,12 @@ services:
       N8N_PROTOCOL: http
       N8N_SECURE_COOKIE: "false"
       GENERIC_TIMEZONE: ${TZ:-Europe/Paris}
+      # Used by the W1/W3 workflow HTTP Request nodes to reach the
+      # Next.js app from inside the n8n container.
+      ZEN_APP_URL: ${ZEN_APP_URL:-http://host.docker.internal:3000}
+      # n8n blocks $env access from node expressions by default (security
+      # default); the W1/W3 HTTP Request node URLs read $env.ZEN_APP_URL.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
     ports:
       - "${N8N_PORT:-5678}:5678"
     volumes:
