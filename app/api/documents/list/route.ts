@@ -17,6 +17,7 @@ export async function GET() {
       department_name: string | null;
       version_count: number;
       latest_version: number | null;
+      latest_version_id: string | null;
       latest_status: string | null;
       review_date: string | null;
       created_at: string;
@@ -31,6 +32,9 @@ export async function GET() {
         dep.name AS department_name,
         COUNT(v.id)::int AS version_count,
         MAX(v.version_number) AS latest_version,
+        (SELECT v2.id FROM document_versions v2
+         WHERE v2.document_id = d.id
+         ORDER BY v2.version_number DESC LIMIT 1) AS latest_version_id,
         (SELECT v2.status FROM document_versions v2
          WHERE v2.document_id = d.id
          ORDER BY v2.version_number DESC LIMIT 1) AS latest_status,

@@ -49,3 +49,6 @@ const out = path.join(__dirname, "supabase-setup.sql");
 await writeFile(out, parts.join("\n"), "utf8");
 console.log(`Written: ${out}`);
 console.log("Next: paste db/supabase/supabase-setup.sql into Supabase SQL Editor and run.");
+console.log("");
+console.log("⚠ This file contains the real APP_ROLE_PASSWORD in plain text.");
+console.log("  It is gitignored (db/supabase/supabase-setup.sql) — NEVER `git add -f` it.");

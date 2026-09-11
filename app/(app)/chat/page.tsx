@@ -89,7 +89,7 @@ export default function ChatPage() {
         {messages.length === 0 && (
           <div className="text-center text-gray-400 mt-24">
             <p className="text-2xl font-semibold text-gray-300 mb-2">ZEN Knowledge</p>
-            <p className="text-sm">Posez une question sur vos documents d'entreprise.</p>
+            <p className="text-sm">Posez une question sur vos documents d&apos;entreprise.</p>
           </div>
         )}
         {messages.map((msg, i) => (

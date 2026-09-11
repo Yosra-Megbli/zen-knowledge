@@ -12,6 +12,7 @@ interface Document {
   department_name: string | null;
   version_count: number;
   latest_version: number | null;
+  latest_version_id: string | null;
   latest_status: string | null;
   review_date: string | null;
   created_at: string;
@@ -28,12 +29,18 @@ const STATUS_COLORS: Record<string, string> = {
   draft: "bg-yellow-100 text-yellow-700",
   archived: "bg-gray-100 text-gray-500",
   pending_review: "bg-blue-100 text-blue-700",
+  // Ingestion succeeded (extraction/chunking/embeddings done) but the
+  // document has NOT been published yet — awaiting explicit review.
+  // Upload never auto-publishes; see handlePublish below.
+  ready: "bg-blue-100 text-blue-700",
+  failed: "bg-red-100 text-red-700",
 };
 
 export default function DocumentsPage() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -50,7 +57,13 @@ export default function DocumentsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchDocs(); }, [fetchDocs]);
+  useEffect(() => {
+    // Standard fetch-on-mount pattern (no data-fetching library in this
+    // stack); the effect itself sets no state directly, it only invokes
+    // fetchDocs(), whose own setState calls happen after the async fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchDocs();
+  }, [fetchDocs]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -67,15 +80,29 @@ export default function DocumentsPage() {
     if (!res.ok) {
       setError(data.error ?? "Erreur lors de l'upload.");
     } else {
-      // Auto-publish if upload succeeded
-      if (data.documentVersionId) {
-        await fetch(`/api/documents/${data.documentVersionId}/publish`, { method: "POST" });
-      }
+      // Deliberately NOT auto-published here: upload only runs
+      // extraction/chunking/embeddings (status becomes "ready" on
+      // success). Publication is a separate, explicit action — see
+      // handlePublish — so a reviewer always sees new content before
+      // it becomes visible to chat/retrieval.
       setShowModal(false);
       setForm({ title: "", description: "", visibility: "company", file: null });
       fetchDocs();
     }
     setUploading(false);
+  }
+
+  async function handlePublish(versionId: string) {
+    setPublishingId(versionId);
+    setError(null);
+    const res = await fetch(`/api/documents/${versionId}/publish`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}) as { error?: string });
+      setError(data.error ?? "Erreur lors de la publication.");
+    } else {
+      fetchDocs();
+    }
+    setPublishingId(null);
   }
 
   return (
@@ -105,6 +132,7 @@ export default function DocumentsPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Version</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Propriétaire</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Révision</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -133,6 +161,22 @@ export default function DocumentsPage() {
                   <td className="px-4 py-3 text-gray-500 text-xs">{doc.owner_email}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
                     {doc.review_date ? new Date(doc.review_date).toLocaleDateString("fr-FR") : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {doc.latest_status === "ready" && doc.latest_version_id ? (
+                      <button
+                        onClick={() => handlePublish(doc.latest_version_id!)}
+                        disabled={publishingId === doc.latest_version_id}
+                        className="text-xs font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 transition-colors"
+                        title="Rend cette version visible dans le chat (recherche RAG)"
+                      >
+                        {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
+                      </button>
+                    ) : doc.latest_status === "failed" ? (
+                      <span className="text-xs text-red-500">Échec du traitement</span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

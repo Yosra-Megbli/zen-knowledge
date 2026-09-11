@@ -35,6 +35,12 @@ env/
 # Local file storage (uploaded documents) — never committed
 .storage/
 
+# Generated Supabase deployment SQL — contains the real app_role
+# password inline (needed to paste into Supabase SQL Editor as a
+# single script), so it must NEVER be committed. Regenerate locally
+# with: node db/supabase/export-migrations.mjs
+db/supabase/supabase-setup.sql
+
 # Logs
 logs/
 *.log
