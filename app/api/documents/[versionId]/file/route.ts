@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "../../../../../lib/permissions/authContext.ts";
+import { canAccessDocumentVisibility } from "../../../../../lib/permissions/documentVisibility.ts";
 import { withAuthContext } from "../../../../../lib/db/withAuthContext.ts";
 import { storageProvider } from "../../../../../lib/storage/index.ts";
 
 // GET /api/documents/[versionId]/file
-// Auth: session required. RLS on document_versions ensures the user can
-// only read versions belonging to their company. file_key is never
-// accepted from the client — always read from the DB under RLS.
+// Auth: session required. RLS on document_versions only enforces
+// COMPANY isolation (by design — see db/migrations/0009, "documents
+// RLS: company-isolation-only, for the library management use case").
+// It does NOT enforce visibility (company/department/restricted) the
+// way document_chunks_select does for retrieval. This route must
+// therefore replicate that same visibility check itself — otherwise an
+// employee could download the raw file of a "restricted" document
+// (admin-only) simply by knowing its versionId (e.g. surfaced via
+// /api/documents/list, which — also by design — lists metadata for
+// every document in the company regardless of visibility).
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ versionId: string }> }
@@ -17,8 +25,14 @@ export async function GET(
   const { versionId } = await params;
 
   const row = await withAuthContext(ctx, async (client) => {
-    const res = await client.query<{ file_key: string; file_type: string; title: string }>(
-      `SELECT v.file_key, v.file_type, d.title
+    const res = await client.query<{
+      file_key: string;
+      file_type: string;
+      title: string;
+      visibility: string;
+      department_id: string | null;
+    }>(
+      `SELECT v.file_key, v.file_type, d.title, d.visibility, d.department_id
        FROM document_versions v
        JOIN documents d ON d.id = v.document_id
        WHERE v.id = $1 AND v.file_key IS NOT NULL AND v.file_key != 'pending'`,
@@ -28,6 +42,12 @@ export async function GET(
   });
 
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  // Returns 404 (not 403) so a disallowed file's existence is never
+  // distinguished from a missing one.
+  if (!canAccessDocumentVisibility(ctx, { visibility: row.visibility, departmentId: row.department_id })) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
 
   let data: Buffer;
   try {
