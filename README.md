@@ -2,35 +2,85 @@
 
 Projet de test technique — **ZEN Group, Série F, F1 : "ZEN Knowledge — RAG interne"**.
 
-## Objectif général
-
-Construire une plateforme conversationnelle interne multi-entreprises permettant de
-rechercher des informations dans des documents d'entreprise via un système RAG
-(Retrieval-Augmented Generation) sécurisé, avec isolation stricte entre entreprises,
-gestion des rôles/permissions, versioning documentaire, citations vérifiables et
-outils d'administration.
+Plateforme conversationnelle interne multi-entreprises permettant de
+rechercher des informations dans des documents d'entreprise via un
+système RAG (Retrieval-Augmented Generation) sécurisé : isolation
+stricte entre entreprises, permissions par rôle/département/
+visibilité, versioning documentaire, citations vérifiables,
+obsolescence automatique, et outils d'administration — le tout à
+**budget 0€**.
 
 ## Statut
 
-🚧 **Phase 3 — Authentication + local embeddings + authorized vector
-retrieval** — un utilisateur peut se connecter (Auth.js), et une requête
-de recherche authentifiée exécute une vraie recherche vectorielle
-(pgvector, embeddings locaux 384D) filtrée par PostgreSQL RLS. Pas de
-génération de réponse LLM/Groq, pas de RAG complet, pas de chat, pas de
-workflows n8n, pas d'ingestion de documents, pas d'UI métier, pas de
-déploiement.
+Fonctionnalité complète de bout en bout :
 
-## Stack
+- Authentification (Auth.js), sessions JWT, contexte d'autorisation serveur-only
+- Base PostgreSQL + pgvector, RLS sur les 12 tables, deux rôles PostgreSQL séparés
+- Embeddings locaux (aucun appel API externe), recherche vectorielle autorisée par RLS
+- Pipeline d'ingestion complet (upload → extraction → nettoyage → chunking → embedding → publication explicite)
+- Génération de réponse RAG via Groq, citations vérifiables, refus "aucune source" avant tout appel LLM
+- UI : login, chat, gestion documentaire, administration
+- Workflows n8n : **W1** (ingestion) et **W3** (obsolescence — scan, notification, dépublication automatique)
+- Déploiement Vercel + Supabase Free fonctionnel
+- Dataset de démonstration réaliste (14 documents, 2 entreprises) — voir [`dataset/README.md`](dataset/README.md)
 
-- Next.js + TypeScript
-- PostgreSQL + pgvector (Docker en local, Supabase Free en démonstration)
-- Auth.js (Credentials + JWT) — implémenté Phase 3
-- Embeddings locaux — `Xenova/multilingual-e5-small` via `@huggingface/transformers` (384 dimensions, CPU, gratuit) — implémenté Phase 3
-- Groq (LLM) — modèle `openai/gpt-oss-120b` — pas encore implémenté (Phase 4+)
-- Stockage Supabase Storage (abstraction remplaçable) — pas encore implémenté
-- n8n (auto-hébergé, Docker) — pas encore implémenté
+Non couvert par ce dépôt : workflow n8n **W2** (implémenté directement
+comme routes Next.js `/api/rag/*` plutôt qu'en n8n séparé — voir
+"Pourquoi W2 n'est pas un workflow n8n" plus bas), vidéo de
+démonstration.
 
-## Développement local (Phase 1)
+## Stack (0€)
+
+| Composant | Choix | Pourquoi |
+|---|---|---|
+| Framework | Next.js 16 (App Router) + TypeScript | |
+| Base de données | PostgreSQL + pgvector — Docker en local, **Supabase Free** en production | Pas d'AWS/RDS payant |
+| LLM | **Groq** (`openai/gpt-oss-120b`) | Alternative gratuite à OpenAI, API compatible |
+| Embeddings | **Locaux** — `Xenova/multilingual-e5-small` (384D, CPU) via `@huggingface/transformers` | Pas d'API d'embedding payante |
+| Stockage fichiers | Provider abstrait — filesystem local en dev, **Supabase Storage** en production | Pas d'AWS S3 |
+| Auth | Auth.js (Credentials + JWT) | |
+| Automatisation | n8n auto-hébergé (Docker) | |
+
+## Architecture — permissions avant recherche vectorielle
+
+Le principe non négociable de ce projet : **l'autorisation ne filtre
+jamais après coup un résultat de recherche vectorielle — elle fait
+partie de la requête SQL elle-même**, via PostgreSQL Row-Level
+Security.
+
+```
+Auth.js session (JWT signé, jamais modifiable côté client)
+    ↓
+lib/permissions/authContext.ts : getAuthContext()
+    ↓
+{ userId, companyId, role, departmentId }
+    ↓
+lib/db/withAuthContext.ts  — BEGIN; SET LOCAL app.company_id/role/department_id; ... ; COMMIT
+    ↓
+PostgreSQL RLS (db/migrations/0009_rls_and_grants.sql)
+    ↓
+SELECT ... FROM document_chunks ORDER BY embedding <=> $1 LIMIT $2
+    (la policy RLS s'applique AVANT le tri par similarité — jamais un post-filtre TypeScript)
+```
+
+Deux rôles PostgreSQL distincts (`db/migrations/0002_roles.sql`) :
+
+- **`migration_role`** — superutilisateur Docker local. Migrations,
+  seed, maintenance. **Jamais utilisé au runtime applicatif.**
+- **`app_role`** — `NOSUPERUSER`, `NOBYPASSRLS`. Utilisé pour **toutes**
+  les requêtes runtime (auth, ingestion, retrieval, RAG, W1/W3). Ne
+  peut jamais contourner une policy RLS, même par erreur de code.
+
+Exception étroite et auditée : quelques fonctions PostgreSQL
+`SECURITY DEFINER` (`auth_find_user_by_email`, `w3_get_review_due_documents`,
+`w3_resolve_document_for_task`, les deux triggers `propagate_*_auth_change`)
+pour les cas où une opération légitime doit s'exécuter *avant* qu'un
+contexte RLS puisse exister (résolution d'identité au login, scan
+administratif cross-company). Chacune : ne retourne que les colonnes
+strictement nécessaires, `EXECUTE` révoqué de `PUBLIC` et accordé
+uniquement à `app_role`, `search_path` figé.
+
+## Développement local
 
 ### Prérequis
 
@@ -44,207 +94,217 @@ npm install
 cp .env.example .env.local
 ```
 
-Renseigner les valeurs dans `.env.local` (jamais commit — voir `.gitignore`).
+Renseigner `.env.local` (jamais commit). Voir les commentaires dans
+`.env.example` pour chaque variable, en particulier `RAG_MIN_SIMILARITY`
+(calibrage expliqué dans le fichier) et la distinction `DATABASE_URL`
+(`app_role`, jamais `postgres`) vs `SUPABASE_DIRECT_URL` (`postgres`,
+migrations uniquement).
 
-### Lancer les services (PostgreSQL + pgvector, n8n)
+### Services (PostgreSQL + pgvector, n8n)
 
 ```
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-### Lancer l'application Next.js
+### Application
 
 ```
+npm run db:migrate
 npm run dev
 ```
 
-### Vérifications
-
-- Application : http://localhost:3000
+- App : http://localhost:3000
 - Health check : http://localhost:3000/api/health
 - n8n : http://localhost:5678
-- PostgreSQL : `docker compose -f docker/docker-compose.yml exec postgres pg_isready`
 
-## Base de données (Phase 2)
-
-### Schéma
+## Base de données
 
 12 tables : `companies`, `departments`, `users`, `documents`,
 `document_versions`, `document_chunks`, `ingestion_jobs`, `conversations`,
-`conversation_messages`, `citations`, `feedback`, `audit_logs`.
-Définition complète : [`db/migrations/`](db/migrations/).
+`conversation_messages`, `citations`, `feedback`, `audit_logs`, plus
+`review_tasks` (W3). Schéma complet : [`db/migrations/`](db/migrations/).
 
-### Rôles PostgreSQL
+RLS activée et **forcée** (`FORCE ROW LEVEL SECURITY`) sur toutes les
+tables. `document_chunks_select` (la policy la plus importante) filtre
+en une seule clause : entreprise, statut publication du document ET de
+la version, et visibilité (`company` / `department` / `restricted`).
 
-- **migration_role** (`POSTGRES_USER`, superutilisateur Docker local) —
-  migrations, création des policies, seed, maintenance contrôlée.
-  **Jamais utilisé au runtime.** Contourne RLS par nature (propriété des
-  superutilisateurs PostgreSQL, pas une faille de ce schéma).
-- **app_role** — rôle applicatif restreint (`NOSUPERUSER`, `NOBYPASSRLS`),
-  créé par `db/migrations/0002_roles.sql`. Utilisé pour **toutes** les
-  requêtes runtime, une fois qu'il y en aura (Phase 3+). Ne peut jamais
-  contourner les policies RLS.
-
-### Row Level Security
-
-RLS activée et forcée sur les 12 tables. `document_chunks` porte le
-filtre complet (company + statut publication du document et de la
-version + visibilité company/department/restricted) directement sur la
-table qui servira au futur retrieval vectoriel — l'autorisation fait
-partie de la requête, jamais un post-filtre. Détail des policies :
-[`db/migrations/0009_rls_and_grants.sql`](db/migrations/0009_rls_and_grants.sql).
-
-### Contexte d'autorisation
-
-`db/db.mjs` (scripts) expose `withAuthContext()` pour les tests/seed ;
-`lib/db/withAuthContext.ts` (application) fait de même pour le runtime,
-sur un pool `app_role`. Les deux appliquent le contexte de façon
-strictement transactionnelle :
+### Commandes DB
 
 ```
-BEGIN
-SELECT set_config('app.company_id', '...', true)
-SELECT set_config('app.role', '...', true)
-SELECT set_config('app.department_id', '...', true)
--- requête
-COMMIT
+npm run db:migrate        # migrations idempotentes
+npm run db:reset          # DROP/CREATE SCHEMA public puis re-migrer (ne touche pas aux rôles)
+npm run db:seed           # fixtures RLS/RAG (Acme Corp / Nova Bank) — hand-inserted, pour les tests automatisés
+npm run db:seed-demo      # dataset de démo réaliste (ZEN Retail Tunisia / ZEN Home & Lifestyle) — via le vrai pipeline, pour la démo/grading
 ```
 
-Le `true` (LOCAL) garantit que le contexte disparaît automatiquement au
-`COMMIT`/`ROLLBACK` — jamais de variable globale applicative.
+`db:seed` et `db:seed-demo` créent des entreprises totalement
+distinctes — ils ne se marchent jamais dessus et peuvent tous les deux
+tourner sur la même base.
 
-### Commandes
+## Pipeline d'ingestion — "Upload ≠ Published"
 
-```
-npm run db:migrate      # applique les migrations non encore appliquées (idempotent)
-npm run db:reset         # DROP/CREATE SCHEMA public (ne touche pas aux rôles) puis re-migrer
-npm run db:seed           # données fictives multi-entreprises + embeddings réels (voir db/seed.mjs)
-npm run test:rls            # 13 tests d'isolation Phase 2, exécutés directement via app_role
-npm run test:embeddings      # 6 tests unitaires embeddings (voir "Embeddings locaux" ci-dessous)
-npm run test:auth             # 11 tests unitaires Auth.js (callbacks, sans serveur HTTP)
-npm run test:rag                # 15 tests de sécurité retrieval (TEST A-L + seuil no-source)
-npm run test:auth-http            # 5 tests HTTP live — nécessite un serveur démarré (voir plus bas)
-npm run test:phase3                # rls + embeddings + auth + rag, dans cet ordre
-```
-
-### Tests de sécurité
-
-`tests/integration/rls/` — connectent directement en PostgreSQL avec
-`app_role` (jamais via une fonction TypeScript de filtrage) : isolation
-cross-company, isolation par rôle/département, documents non publiés/
-supprimés/obsolètes, anciennes versions, cycle de vie transactionnel du
-contexte, et une preuve explicite que `app_role` voit strictement moins
-de lignes que `migration_role` sur la même requête sans clause `WHERE`.
-
-## Authentication + embeddings + retrieval autorisé (Phase 3)
-
-### Architecture d'authentification
-
-Auth.js (Credentials provider, sessions JWT) **identifie** l'utilisateur
-— ce n'est pas un second système d'autorisation. Le flux complet :
+`lib/ingestion/pipeline/ingestDocument.ts` est le point d'entrée
+unique, utilisé identiquement par l'upload UI (`/api/documents/upload`)
+et par le webhook n8n W1 (`/api/n8n/ingest`) :
 
 ```
-Auth.js session (JWT signé)
-    ↓
-lib/permissions/authContext.ts : getAuthContext()
-    ↓
-{ userId, companyId, role, departmentId }  (jamais depuis le client)
-    ↓
-lib/db/withAuthContext.ts
-    ↓
-Transaction PostgreSQL (app_role) + SET LOCAL
-    ↓
-PostgreSQL RLS (db/migrations/0009_rls_and_grants.sql)
+validation fichier (type/taille) → extraction texte (PDF/TXT)
+  → nettoyage → découpage en chunks → embedding local
+  → persistance (document_version.status = 'ready')
 ```
 
-Un utilisateur authentifié sans `company_id` (`getAuthContext()`
-retourne `null`) est refusé — jamais de company assignée
-silencieusement.
+Un document ingéré **ne devient jamais publié automatiquement** — la
+publication (`publishVersion.ts`) est une action explicite séparée,
+qui exige `role != 'employee'`. Tant qu'un document n'est pas publié,
+`document_chunks_select` (RLS) le rend structurellement invisible au
+retrieval, quel que soit le rôle de l'utilisateur qui interroge —
+prouvé par test, pas seulement par convention de code.
 
-**Login** : `POST /api/auth/callback/credentials` (email + password).
-La correspondance email → utilisateur passe par
-`auth_find_user_by_email()`, une fonction `SECURITY DEFINER` étroitement
-scopée (`db/migrations/0010_auth.sql`) — la seule exception nécessaire
-pour retrouver l'entreprise d'un utilisateur **avant** qu'un contexte
-RLS puisse exister. Elle ne retourne que les colonnes d'identité,
-`EXECUTE` est révoqué de `PUBLIC` et accordé uniquement à `app_role`.
+Gestion d'erreurs typée (`lib/ingestion/errors.ts`) : fichier vide,
+type non supporté, PDF corrompu/scanné sans texte, échec
+d'embedding — chaque échec est journalisé dans `ingestion_jobs` avec
+un code d'erreur, jamais avec le contenu du document.
 
-**Le client ne peut jamais imposer `company_id`/`role`/`department_id`** :
-`authorizeCredentials()` (`lib/auth/callbacks.ts`) ne lit que
-`email`/`password` du payload de connexion ; ces trois valeurs viennent
-exclusivement du JWT signé côté serveur. Prouvé par test (voir plus
-bas), y compris avec un payload contenant des champs falsifiés.
+## RAG — génération de réponse
 
-### Demo credentials (données fictives, seed uniquement)
+`lib/rag/answerQuestion.ts` orchestre :
+
+1. `retrieveAuthorizedChunks()` (RLS, voir plus haut)
+2. **Seuil no-source** (`RAG_MIN_SIMILARITY`) : si aucun chunk autorisé
+   ne dépasse le seuil, retour `{ noSource: true }` — **le LLM n'est
+   jamais appelé**. Vérifié par test (`F — zero authorized sources
+   produces refusal without calling LLM`), pas seulement par une
+   instruction de prompt.
+3. Appel Groq (`lib/llm/groq.ts`) avec uniquement les chunks autorisés
+   comme contexte — jamais de contenu d'une autre entreprise, jamais
+   de chunk non publié/supprimé/archivé (chacun prouvé par test).
+4. Citations reconstruites à partir des `[SOURCE n]` réellement
+   présentes dans le contexte envoyé — une citation fabriquée par le
+   LLM vers une source inexistante est silencieusement écartée, jamais
+   affichée.
+5. Journalisation dans `audit_logs` (métadonnées uniquement — jamais
+   `GROQ_API_KEY`, jamais le contenu brut du document).
+
+Le texte d'un document (y compris une tentative d'injection de prompt
+qu'il contiendrait) est **toujours passé au LLM comme donnée dans un
+bloc source**, jamais interprété comme une instruction — voir le
+document `A7` du dataset de démo et le test `O`.
+
+## n8n — automatisation
+
+### W1 — Ingestion
+
+Webhook `POST /api/n8n/ingest` (secret partagé `X-N8N-Secret`).
+`company_id`/`role`/`department_id` résolus côté serveur via
+`auth_find_user_by_email()` (jamais acceptés du corps de la requête).
+Workflow + doc : [`n8n/workflows/W1-ingestion.json`](n8n/workflows/W1-ingestion.json),
+[`n8n/docs/W1-ingestion.md`](n8n/docs/W1-ingestion.md).
+
+### W3 — Obsolescence
+
+Cron quotidien : scanne les documents publiés dont `review_date`
+approche ou est dépassée (`GET /api/n8n/review-due`, cross-company via
+`w3_get_review_due_documents()` — SECURITY DEFINER), notifie
+(`POST /api/n8n/review-due/notify`, upsert idempotent sur
+`review_tasks`), et dépublie automatiquement au-delà de la période de
+grâce (`POST /api/n8n/unpublish`) — le document redevient
+immédiatement non-retrouvable, exactement comme une dépublication
+manuelle. Workflow + doc : [`n8n/workflows/W3-obsolescence.json`](n8n/workflows/W3-obsolescence.json),
+[`n8n/docs/W3-obsolescence.md`](n8n/docs/W3-obsolescence.md).
+
+Toutes les routes d'écriture W3 résolvent `company_id`/`owner_id`
+côté serveur via `w3_resolve_document_for_task()` — jamais depuis le
+corps de la requête n8n, même si n8n est un appelant de confiance
+(principe appliqué uniformément, pas seulement pour les entrées
+utilisateur).
+
+### Pourquoi W2 n'est pas un workflow n8n séparé
+
+La spec envisage W2 comme "workflow question/RAG". Il est implémenté
+directement comme routes Next.js (`/api/rag/answer`, `/api/rag/retrieve`,
+`/api/rag/feedback`), appelées par l'UI chat, plutôt que via un
+webhook n8n intermédiaire : la latence d'un aller-retour HTTP
+supplémentaire (Next.js → n8n → Next.js → Groq) n'apporte aucun
+bénéfice d'orchestration ici (contrairement à W1/W3, qui sont
+déclenchés par des événements externes — upload utilisateur asynchrone,
+cron) et dégraderait l'expérience de chat interactif.
+
+## Interface
+
+- `/login` — Auth.js Credentials
+- `/chat` — question/réponse RAG, citations cliquables vers le fichier source
+- `/documents` — liste, upload, publication explicite (bouton "Publier", visible uniquement quand une version est `ready`)
+- `/admin` — statistiques d'usage (`/api/admin/stats`)
+
+## Tests
 
 ```
-admin@acmecorp.example        / ZenDemo2026!
-contributor@acmecorp.example  / ZenDemo2026!
-employee@acmecorp.example     / ZenDemo2026!
-admin@novabank.example        / ZenDemo2026!
-...
+npm run test:rls          # 13 — isolation RLS, connexion directe app_role
+npm run test:embeddings   # 6  — embeddings locaux
+npm run test:auth         # 11 — callbacks Auth.js
+npm run test:rag          # 34 — retrieval + génération RAG (sécurité + comportement)
+npm run test:ingestion    # 39 — pipeline d'ingestion + W3 (inclut unpublishDocument, resolve function, upsert review_tasks)
+npm run test:auth-http    # 5  — HTTP live (nécessite un serveur démarré)
+npm run test:phase3       # rls + embeddings + auth + rag
+npm run test:phase5       # rls + ingestion + rag5
 ```
 
-Mot de passe identique pour tous les comptes de démonstration créés par
-`npm run db:seed` — aucune donnée réelle, base Docker locale uniquement.
+Discipline : toutes les propriétés de sécurité listées ci-dessus sont
+vérifiées par un test qui échouerait si la propriété était violée —
+jamais uniquement par lecture de code ou convention. Plusieurs bugs
+réels ont été trouvés par cette discipline en cours de projet (policy
+RLS combinant SELECT+UPDATE en AND, seuil `RAG_MIN_SIMILARITY` jamais
+calibré, écart entre `document_chunks` RLS company-only et la
+visibilité réelle sur la route de téléchargement de fichier — voir
+git log pour le détail de chaque correction).
 
-### Embeddings locaux
+## Dataset de démonstration
 
-- Modèle : `Xenova/multilingual-e5-small` via `@huggingface/transformers`
-- Dimension : **384**, exécution CPU, aucune clé API, aucun appel externe
-- Préfixes obligatoires : `"query: "` (recherche) / `"passage: "` (documents) —
-  voir `lib/embeddings/prefixes.ts`
-- Pooling `mean` + normalisation L2 (requis par le modèle)
-- Instance singleton (`lib/embeddings/local-e5.ts`), chargée une seule fois
-- Cache local du modèle (~100 Mo) : `.cache/transformers-models/`
-  (gitignored) — téléchargé une fois, réutilisé ensuite
-- **Premier test/premier appel = lent** (téléchargement + chargement du
-  modèle, quelques secondes à ~1 minute selon la connexion). Les appels
-  suivants dans le même process sont rapides (mémoïsation).
+14 documents réalistes (français), 2 entreprises fictives, ingérés et
+publiés via le vrai pipeline. Couvre toutes les visibilités,
+versioning, obsolescence, une contradiction volontaire entre deux
+documents publiés, une tentative d'injection de prompt, un document
+jamais publié et un document supprimé. Détail complet, comptes de
+démonstration et scénarios de test suggérés : [`dataset/README.md`](dataset/README.md).
 
-### Retrieval vectoriel autorisé
-
-`lib/rag/retrieveAuthorizedChunks.ts` est le **seul** point d'accès à
-`document_chunks`. Il utilise exclusivement `app_role` (jamais
-`migration_role`), génère l'embedding de la requête localement, et
-laisse PostgreSQL RLS filtrer :
-
-```sql
--- à l'intérieur de withAuthContext (app_role, contexte déjà posé)
-SELECT ...
-FROM document_chunks dc
-JOIN documents d ON d.id = dc.document_id
-JOIN document_versions v ON v.id = dc.document_version_id
-WHERE dc.embedding IS NOT NULL
-ORDER BY dc.embedding <=> $1::vector
-LIMIT $2
+```
+npm run db:seed-demo
 ```
 
-Aucun `WHERE company_id = ...` explicite n'est nécessaire dans cette
-requête : la policy RLS `document_chunks_select` s'applique
-automatiquement, avant le tri vectoriel. Une assertion applicative
-post-requête (défense en profondeur) vérifie que chaque ligne retournée
-appartient bien au `company_id` du contexte, et lève une erreur sinon —
-jamais un simple filtre silencieux.
+## Déploiement (Vercel + Supabase Free)
 
-### Seuil no-source (fondation, pas de génération de réponse)
+- Base : Supabase Free (Postgres + pgvector), connexion runtime via le
+  pooler Supavisor **avec `app_role`**, jamais `postgres` (voir
+  `.env.example`).
+- Stockage : `lib/storage/index.ts` sélectionne automatiquement
+  Supabase Storage si `SUPABASE_URL` est défini, sinon le filesystem
+  local (incompatible avec le filesystem éphémère de Vercel).
+- Auth.js : `trustHost: true` explicitement dans la config
+  `NextAuth({...})` (pas seulement `AUTH_TRUST_HOST` en variable
+  d'environnement — source d'un bug de production `UntrustedHost`
+  résolu en cours de projet).
+- Variables d'environnement à configurer sur Vercel : toutes celles de
+  `.env.example`, avec `RAG_MIN_SIMILARITY=0.83` (voir calibrage
+  ci-dessus) et le mot de passe `app_role` réel (distinct du mot de
+  passe superutilisateur `postgres`, à faire tourner régulièrement).
 
-`RAG_MIN_SIMILARITY` (défaut conservateur : `0.3`, non calibré) définit
-la similarité minimale pour qu'un chunk autorisé soit considéré
-pertinent. En dessous, `retrieveAuthorizedChunks()` retourne
-`noSource: true` et une liste vide. **Aucune réponse n'est générée** —
-ce mécanisme prépare uniquement la Phase 4 (Groq/RAG).
+## Limitations connues
 
-### Limitations connues
-
-- Pas de génération de réponse LLM (Groq) — hors périmètre Phase 3
-- Pas de protection anti prompt-injection dans les documents — appartient
-  à la phase d'ingestion/RAG, volontairement pas revendiquée ici
-- Seuil `RAG_MIN_SIMILARITY` non calibré sur un vrai corpus
-- Pas d'UI de connexion — uniquement l'API Auth.js et un test HTTP direct
-- `npm run test:auth-http` nécessite un serveur démarré au préalable
-  (`npm run build && PORT=3100 npm run start`), comme `test:rls` nécessite
-  Docker démarré — ce n'est pas un test auto-suffisant
+- **`RAG_MIN_SIMILARITY` doit être configuré manuellement sur Vercel**
+  (`0.83`, voir `.env.example`) — le fallback code (`0.3`) est
+  délibérément conservateur mais insuffisant en pratique pour ce
+  modèle d'embedding.
+- Pas de vidéo de démonstration (hors du périmètre d'un assistant
+  automatisé).
+- Pas de test automatisé de bout en bout contre un vrai
+  `GROQ_API_KEY` en environnement CI (les tests RAG utilisent un
+  fournisseur LLM mocké, injecté via `setLlmProvider()` — le contrat
+  d'appel HTTP/parsing de réponse Groq lui-même n'est vérifié que
+  manuellement).
+- Le mot de passe superutilisateur Supabase (`SUPABASE_DIRECT_URL`)
+  doit être tourné périodiquement dans le tableau de bord Supabase —
+  action manuelle, hors du périmètre du code.
 
 ## Licence / confidentialité
 
