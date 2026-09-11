@@ -27,19 +27,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // build callback URLs is safe here regardless of whether the env var
   // reaches the runtime correctly.
   trustHost: true,
-  // TEMPORARY diagnostic logging — makes Auth.js print the real
-  // underlying error to the Vercel function logs (findable via the
-  // "AUTH_DEBUG_ERROR" prefix) instead of only the generic client-facing
-  // "problem with the server configuration" message. Remove once the
-  // production auth issue is resolved.
-  logger: {
-    error(error: Error) {
-      console.error("AUTH_DEBUG_ERROR:", error.name, "-", error.message, error.stack);
-    },
-    warn(code: string) {
-      console.warn("AUTH_DEBUG_WARN:", code);
-    },
-  },
   providers: [
     Credentials({
       credentials: {
