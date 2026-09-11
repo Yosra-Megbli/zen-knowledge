@@ -36,7 +36,7 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-      <h1 className="font-display text-xl font-semibold text-ink-950">Administration</h1>
+      <h1 className="font-display text-3xl font-bold text-ink-950 tracking-tight">Administration</h1>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

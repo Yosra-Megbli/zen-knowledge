@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, Fragment } from "react";
 import ReactMarkdown from "react-markdown";
+import { Package, Users, Truck, Lock, ExternalLink, ThumbsUp, ThumbsDown, type LucideIcon } from "lucide-react";
 import { LogoMark } from "../../components/Logo.tsx";
 
 interface Citation {
@@ -29,11 +30,11 @@ interface Message {
 // placeholder copy) — clicking one shows the full RAG flow (question
 // -> answer -> citation -> source document) in one click instead of
 // requiring a blank page and a typed question.
-const SUGGESTIONS = [
-  { icon: "📦", label: "Politique produit", question: "Quel est le délai de retour produit ?" },
-  { icon: "👋", label: "RH", question: "Quelle est la procédure d'intégration des nouveaux employés ?" },
-  { icon: "🚚", label: "Logistique", question: "Quelle est la politique de livraison ?" },
-  { icon: "🔒", label: "Confidentialité", question: "Quelle est la grille salariale et les primes pour 2026 ?" },
+const SUGGESTIONS: { icon: LucideIcon; label: string; question: string }[] = [
+  { icon: Package, label: "Politique produit", question: "Quel est le délai de retour produit ?" },
+  { icon: Users, label: "RH", question: "Quelle est la procédure d'intégration des nouveaux employés ?" },
+  { icon: Truck, label: "Logistique", question: "Quelle est la politique de livraison ?" },
+  { icon: Lock, label: "Confidentialité", question: "Quelle est la grille salariale et les primes pour 2026 ?" },
 ];
 
 export default function ChatPage() {
@@ -169,11 +170,11 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full">
         {messages.length === 0 && (
           <div className="text-center mt-16">
-            <span className="inline-flex mb-4">
+            <span className="inline-flex mb-5">
               <LogoMark className="w-12 h-12" />
             </span>
-            <p className="font-display text-2xl font-semibold text-ink-500 mb-2">Comment puis-je vous aider ?</p>
-            <p className="text-sm text-ink-300 mb-8">
+            <p className="font-display text-4xl font-bold text-ink-950 mb-3 tracking-tight">Comment puis-je vous aider ?</p>
+            <p className="text-sm text-ink-500 mb-10">
               Interrogez les documents autorisés de votre entreprise.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left max-w-xl mx-auto">
@@ -182,12 +183,17 @@ export default function ChatPage() {
                   key={s.question}
                   onClick={(e) => send(e, s.question)}
                   disabled={loading}
-                  className="bg-white border border-ink-100 rounded-xl p-4 hover:border-lime-300 hover:shadow-sm transition-all disabled:opacity-50"
+                  className="flex items-start gap-3 bg-white border border-ink-100 rounded-lg p-4 hover:border-lime-400 hover:shadow-sm transition-all disabled:opacity-50"
                 >
-                  <p className="text-xs font-medium text-lime-600 mb-1">
-                    {s.icon} {s.label}
-                  </p>
-                  <p className="text-sm text-ink-700">{s.question}</p>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-100 text-lime-700">
+                    <s.icon size={16} strokeWidth={2} />
+                  </span>
+                  <span>
+                    <span className="block text-[11px] font-bold uppercase tracking-wider text-lime-700 mb-1">
+                      {s.label}
+                    </span>
+                    <span className="block text-sm text-ink-950">{s.question}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -232,10 +238,10 @@ export default function ChatPage() {
                               href={fileUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-lime-500 hover:text-lime-700 font-medium transition-colors"
+                              className="text-lime-600 hover:text-lime-800 transition-colors"
                               title="Ouvrir le document"
                             >
-                              ↗
+                              <ExternalLink size={13} strokeWidth={2} />
                             </a>
                           </div>
                         </div>
@@ -254,24 +260,25 @@ export default function ChatPage() {
               {msg.role === "assistant" && !msg.refusal && msg.messageId && (
                 <div className="flex items-center gap-3 mt-1.5 px-1">
                   {msg.feedback ? (
-                    <span className="text-xs text-ink-300">
-                      {msg.feedback === "useful" ? "👍 Utile" : "👎 Pas utile"}
+                    <span className="flex items-center gap-1 text-xs text-ink-300">
+                      {msg.feedback === "useful" ? <ThumbsUp size={13} /> : <ThumbsDown size={13} />}
+                      {msg.feedback === "useful" ? "Utile" : "Pas utile"}
                     </span>
                   ) : (
                     <>
                       <button
                         onClick={() => sendFeedback(i, "useful")}
-                        className="text-xs text-ink-300 hover:text-green-600 transition-colors"
+                        className="text-ink-300 hover:text-lime-700 transition-colors"
                         title="Réponse utile"
                       >
-                        👍
+                        <ThumbsUp size={14} strokeWidth={2} />
                       </button>
                       <button
                         onClick={() => sendFeedback(i, "not_useful")}
-                        className="text-xs text-ink-300 hover:text-red-500 transition-colors"
+                        className="text-ink-300 hover:text-red-500 transition-colors"
                         title="Réponse pas utile"
                       >
-                        👎
+                        <ThumbsDown size={14} strokeWidth={2} />
                       </button>
                     </>
                   )}

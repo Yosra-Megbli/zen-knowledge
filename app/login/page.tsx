@@ -47,7 +47,7 @@ export default function LoginPage() {
           <span className="inline-flex mb-4">
             <LogoMark className="w-11 h-11" />
           </span>
-          <h1 className="font-display text-3xl font-semibold text-ink-950 tracking-tight">ZEN Knowledge</h1>
+          <h1 className="font-display text-4xl font-bold text-ink-950 tracking-tight">ZEN Knowledge</h1>
           <p className="text-ink-500 mt-2 text-sm">Plateforme RAG interne multi-entreprises</p>
         </div>
         <form
