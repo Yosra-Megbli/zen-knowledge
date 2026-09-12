@@ -169,8 +169,8 @@ export default function DocumentsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-3xl font-bold text-ink-950 tracking-tight">Bibliothèque de documents</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="font-display text-2xl sm:text-3xl font-bold text-ink-950 tracking-tight">Bibliothèque de documents</h1>
         <button
           onClick={() => setShowModal(true)}
           className="bg-ink-950 hover:bg-ink-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"

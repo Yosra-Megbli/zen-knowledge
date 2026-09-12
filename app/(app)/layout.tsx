@@ -22,10 +22,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen flex flex-col bg-paper-100">
-      <header className="bg-ink-950 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-8">
+      <header className="bg-ink-950 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4 sm:gap-8">
           <Logo dark />
-          <nav className="flex gap-6 text-sm font-medium text-ink-300">
+          <nav className="flex gap-4 sm:gap-6 text-sm font-medium text-ink-300">
             <Link href="/chat" className="hover:text-lime-400 transition-colors">Chat</Link>
             <Link href="/documents" className="hover:text-lime-400 transition-colors">Documents</Link>
             {isAdmin && (
@@ -33,8 +33,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             )}
           </nav>
         </div>
-        <div className="flex items-center gap-4 text-sm text-ink-300">
-          <span>{user.email}</span>
+        <div className="flex items-center gap-2 sm:gap-4 text-sm text-ink-300">
+          {/* Long emails crowd out the badge/logout on narrow screens —
+              the role badge alone is enough context there. */}
+          <span className="hidden sm:inline">{user.email}</span>
           <span className="px-2 py-0.5 rounded-full bg-lime-500 text-ink-950 text-xs font-semibold capitalize">
             {user.role}
           </span>

@@ -14,6 +14,8 @@ import {
   ArrowUp,
   Plus,
   MessageSquare,
+  History,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { LogoMark } from "../../components/Logo.tsx";
@@ -93,6 +95,7 @@ function ChatPageInner() {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -321,39 +324,82 @@ function ChatPageInner() {
     </form>
   );
 
+  // Desktop (md+): a normal static column, exactly as before. Mobile:
+  // a slide-in drawer over a backdrop, since there's no room for a
+  // permanent 256px column — this is the "accessible alternative on
+  // small screens" the sidebar needs, not a second UI to maintain.
   const sidebar = (
-    <div className="hidden md:flex w-64 shrink-0 flex-col border-r border-ink-100 bg-paper-100 h-full">
-      <div className="p-3">
-        <button
-          onClick={() => router.push("/chat")}
-          className="w-full flex items-center gap-2 rounded-lg border border-ink-100 bg-white px-3 py-2 text-sm font-medium text-ink-700 hover:border-lime-400 hover:text-lime-700 transition-colors"
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          Nouvelle conversation
-        </button>
+    <>
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-200 ease-out ${
+          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } md:static md:z-auto md:w-64 md:translate-x-0 md:transition-none flex shrink-0 flex-col border-r border-ink-100 bg-paper-100 h-full`}
+      >
+        <div className="p-3 flex items-center gap-2">
+          <button
+            onClick={() => {
+              router.push("/chat");
+              setMobileSidebarOpen(false);
+            }}
+            className="flex-1 flex items-center gap-2 rounded-lg border border-ink-100 bg-white px-3 py-2 text-sm font-medium text-ink-700 hover:border-lime-400 hover:text-lime-700 transition-colors"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            Nouvelle conversation
+          </button>
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="md:hidden p-2 text-ink-300 hover:text-ink-700"
+            title="Fermer"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
+          {conversations.length === 0 ? (
+            <p className="text-xs text-ink-300 px-2 py-2">Aucune conversation.</p>
+          ) : (
+            conversations.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => {
+                  router.push(`/chat?c=${c.id}`);
+                  setMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm truncate transition-colors ${
+                  c.id === conversationId
+                    ? "bg-lime-100 text-ink-950 font-medium"
+                    : "text-ink-500 hover:bg-white hover:text-ink-900"
+                }`}
+                title={c.title ?? "Nouvelle conversation"}
+              >
+                <MessageSquare size={14} strokeWidth={2} className="shrink-0" />
+                <span className="truncate">{c.title || "Nouvelle conversation"}</span>
+              </button>
+            ))
+          )}
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
-        {conversations.length === 0 ? (
-          <p className="text-xs text-ink-300 px-2 py-2">Aucune conversation.</p>
-        ) : (
-          conversations.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => router.push(`/chat?c=${c.id}`)}
-              className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm truncate transition-colors ${
-                c.id === conversationId
-                  ? "bg-lime-100 text-ink-950 font-medium"
-                  : "text-ink-500 hover:bg-white hover:text-ink-900"
-              }`}
-              title={c.title ?? "Nouvelle conversation"}
-            >
-              <MessageSquare size={14} strokeWidth={2} className="shrink-0" />
-              <span className="truncate">{c.title || "Nouvelle conversation"}</span>
-            </button>
-          ))
-        )}
-      </div>
-    </div>
+    </>
+  );
+
+  // Mobile-only button that opens the drawer above — placed inline in
+  // both render branches below (empty state / active conversation)
+  // since neither shares a common wrapper.
+  const mobileHistoryButton = (
+    <button
+      onClick={() => setMobileSidebarOpen(true)}
+      className="md:hidden inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors px-2 py-1"
+      title="Historique des conversations"
+    >
+      <History size={15} strokeWidth={2} />
+      Conversations
+    </button>
   );
 
   // Empty state: title + suggestions + input form centered together as
@@ -365,7 +411,9 @@ function ChatPageInner() {
     return (
       <div className="flex h-[calc(100vh-57px)]">
         {sidebar}
-        <div className="flex-1 flex flex-col items-center justify-center px-4">
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="md:hidden px-4 pt-3">{mobileHistoryButton}</div>
+          <div className="flex-1 flex flex-col items-center justify-center px-4">
           <div className="w-full max-w-xl text-center">
             <span className="inline-flex mb-5">
               <LogoMark className="w-12 h-12" />
@@ -396,6 +444,7 @@ function ChatPageInner() {
             </div>
             {inputForm}
           </div>
+          </div>
         </div>
       </div>
     );
@@ -405,6 +454,7 @@ function ChatPageInner() {
     <div className="flex h-[calc(100vh-57px)]">
       {sidebar}
       <div className="flex-1 flex flex-col min-w-0">
+        <div className="md:hidden px-4 pt-3">{mobileHistoryButton}</div>
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full">
           {loadingHistory ? (
