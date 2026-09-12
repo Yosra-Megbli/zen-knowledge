@@ -17,6 +17,7 @@ import {
   History,
   X,
   Trash2,
+  Loader2,
   type LucideIcon,
 } from "lucide-react";
 import { LogoMark } from "../../components/Logo.tsx";
@@ -119,6 +120,7 @@ function ChatPageInner() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingPhase, setLoadingPhase] = useState<"retrieving" | "generating">("retrieving");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -137,7 +139,7 @@ function ChatPageInner() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loading, loadingPhase]);
 
   const fetchConversations = useCallback(async () => {
     const res = await fetch("/api/conversations");
@@ -226,6 +228,15 @@ function ChatPageInner() {
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
+    setLoadingPhase("retrieving");
+    // /api/rag/answer processes question in two sequential stages:
+    // 1. Semantic retrieval (embeddings + PostgreSQL pgvector query, ~500-700ms)
+    // 2. Answer synthesis by LLM (Groq / OpenAI, ~800-1500ms)
+    // We transition visually to Phase 2 after 700ms so both states are visible.
+    const phaseTimer = setTimeout(() => {
+      setLoadingPhase("generating");
+    }, 700);
+
     try {
       const res = await fetch("/api/rag/answer", {
         method: "POST",
@@ -276,8 +287,10 @@ function ChatPageInner() {
         ...prev,
         { role: "assistant", content: "Erreur réseau. Veuillez réessayer.", refusal: true },
       ]);
+    } finally {
+      clearTimeout(phaseTimer);
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function sendFeedback(msgIndex: number, rating: "useful" | "not_useful") {
@@ -669,12 +682,13 @@ function ChatPageInner() {
           )}
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-white border border-ink-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-                <div className="flex gap-1 items-center h-4">
-                  <span className="w-1.5 h-1.5 bg-lime-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                  <span className="w-1.5 h-1.5 bg-lime-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 bg-lime-400 rounded-full animate-bounce [animation-delay:300ms]" />
-                </div>
+              <div className="bg-white border border-ink-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-2.5 text-sm text-ink-500">
+                <Loader2 size={16} className="animate-spin text-lime-600 shrink-0" />
+                <span>
+                  {loadingPhase === "retrieving"
+                    ? "Recherche dans vos documents…"
+                    : "Génération de la réponse…"}
+                </span>
               </div>
             </div>
           )}
