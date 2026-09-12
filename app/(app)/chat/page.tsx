@@ -123,6 +123,7 @@ function ChatPageInner() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string | null } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -148,16 +149,25 @@ function ChatPageInner() {
     fetchConversations();
   }, [fetchConversations]);
 
-  async function handleDeleteConversation(e: React.MouseEvent, id: string, title: string | null) {
+  function handleDeleteConversation(e: React.MouseEvent, id: string, title: string | null) {
     e.stopPropagation(); // the row itself also navigates on click
-    if (!window.confirm(`Supprimer la conversation « ${title || "Nouvelle conversation"} » ?`)) return;
+    setConfirmDelete({ id, title });
+  }
+
+  async function confirmAndDeleteConversation() {
+    if (!confirmDelete) return;
+    const { id } = confirmDelete;
+    setConfirmDelete(null);
     setDeletingConversationId(id);
-    const res = await fetch(`/api/conversations/${id}/delete`, { method: "POST" });
-    if (res.ok) {
-      setConversations((prev) => prev.filter((c) => c.id !== id));
-      if (id === conversationId) router.push("/chat");
+    try {
+      const res = await fetch(`/api/conversations/${id}/delete`, { method: "POST" });
+      if (res.ok) {
+        setConversations((prev) => prev.filter((c) => c.id !== id));
+        if (id === conversationId) router.push("/chat");
+      }
+    } finally {
+      setDeletingConversationId(null);
     }
-    setDeletingConversationId(null);
   }
 
   // Loads whichever conversation the URL points to (?c=<id>), or
@@ -445,6 +455,42 @@ function ChatPageInner() {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                <Trash2 size={20} className="text-red-600" strokeWidth={2} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-ink-950 text-base mb-1">Supprimer la conversation ?</h2>
+                <p className="text-sm text-ink-500">
+                  <span className="font-medium text-ink-900">« {confirmDelete.title || "Nouvelle conversation"} »</span> sera
+                  définitivement supprimée. Cette action est irréversible.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmAndDeleteConversation}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 
