@@ -1,7 +1,17 @@
-import { auth } from "../../auth.ts";
+import { auth, signOut } from "../../auth.ts";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Logo } from "../components/Logo.tsx";
+
+// A plain <form action="/api/auth/signout"> POST has no CSRF token —
+// Auth.js rejects it and redirects to its own unstyled error page
+// (?error=MissingCSRF) instead of actually signing out. signOut() as
+// a Server Action goes through Auth.js's own internals directly, csrf
+// token included, and lands exactly on /login as requested.
+async function handleSignOut() {
+  "use server";
+  await signOut({ redirectTo: "/login" });
+}
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -28,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="px-2 py-0.5 rounded-full bg-lime-500 text-ink-950 text-xs font-semibold capitalize">
             {user.role}
           </span>
-          <form action="/api/auth/signout" method="POST">
+          <form action={handleSignOut}>
             <button className="text-ink-300 hover:text-white transition-colors">Déconnexion</button>
           </form>
         </div>
