@@ -277,7 +277,7 @@ npm run test:rls          # 13 — isolation RLS, connexion directe app_role
 npm run test:embeddings   # 6  — embeddings locaux
 npm run test:auth         # 11 — callbacks Auth.js
 npm run test:rag          # 34 — retrieval + génération RAG (sécurité + comportement)
-npm run test:ingestion    # 39 — pipeline d'ingestion + W3 (inclut unpublishDocument, resolve function, upsert review_tasks)
+npm run test:ingestion    # 45 — pipeline d'ingestion + suppression de document + W3 (inclut unpublishDocument, resolve function, upsert review_tasks)
 npm run test:auth-http    # 5  — HTTP live (nécessite un serveur démarré)
 npm run test:conversations-http  # 4  — HTTP live, isolation par utilisateur (même société) sur /api/conversations
 npm run test:phase3       # rls + embeddings + auth + rag

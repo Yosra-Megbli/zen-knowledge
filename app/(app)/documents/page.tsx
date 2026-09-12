@@ -51,6 +51,7 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -149,6 +150,21 @@ export default function DocumentsPage() {
     }
     fetchDocs();
     setRetryingId(null);
+  }
+
+  async function handleDelete(versionId: string, title: string) {
+    if (!window.confirm(`Supprimer « ${title} » ? Le document ne sera plus accessible dans le chat ni la bibliothèque.`)) {
+      return;
+    }
+    setDeletingId(versionId);
+    setError(null);
+    const res = await fetch(`/api/documents/${versionId}/delete`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}) as { error?: string });
+      setError(data.error ?? "Erreur lors de la suppression.");
+    }
+    fetchDocs();
+    setDeletingId(null);
   }
 
   return (
@@ -257,37 +273,49 @@ export default function DocumentsPage() {
                     {doc.review_date ? new Date(doc.review_date).toLocaleDateString("fr-FR") : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    {doc.latest_status === "ready" && doc.latest_version_id ? (
-                      <button
-                        onClick={() => handlePublish(doc.latest_version_id!)}
-                        disabled={publishingId === doc.latest_version_id}
-                        className="text-xs font-medium text-lime-600 hover:text-lime-800 disabled:opacity-50 transition-colors"
-                        title="Rend cette version visible dans le chat (recherche RAG)"
-                      >
-                        {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
-                      </button>
-                    ) : doc.latest_status === "failed" && doc.latest_version_id ? (
-                      <button
-                        onClick={() => handleRetry(doc.latest_version_id!)}
-                        disabled={retryingId === doc.latest_version_id}
-                        className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
-                        title="Relance l'extraction/l'indexation à partir du même fichier"
-                      >
-                        {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
-                      </button>
-                    ) : doc.latest_version_id ? (
-                      <a
-                        href={`/api/documents/${doc.latest_version_id}/file`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
-                        title="Voir le document"
-                      >
-                        Voir <ExternalLink size={12} strokeWidth={2} />
-                      </a>
-                    ) : (
-                      <span className="text-xs text-ink-300">—</span>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {doc.latest_status === "ready" && doc.latest_version_id ? (
+                        <button
+                          onClick={() => handlePublish(doc.latest_version_id!)}
+                          disabled={publishingId === doc.latest_version_id}
+                          className="text-xs font-medium text-lime-600 hover:text-lime-800 disabled:opacity-50 transition-colors"
+                          title="Rend cette version visible dans le chat (recherche RAG)"
+                        >
+                          {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
+                        </button>
+                      ) : doc.latest_status === "failed" && doc.latest_version_id ? (
+                        <button
+                          onClick={() => handleRetry(doc.latest_version_id!)}
+                          disabled={retryingId === doc.latest_version_id}
+                          className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+                          title="Relance l'extraction/l'indexation à partir du même fichier"
+                        >
+                          {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
+                        </button>
+                      ) : doc.latest_version_id ? (
+                        <a
+                          href={`/api/documents/${doc.latest_version_id}/file`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
+                          title="Voir le document"
+                        >
+                          Voir <ExternalLink size={12} strokeWidth={2} />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-ink-300">—</span>
+                      )}
+                      {doc.latest_version_id && (
+                        <button
+                          onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
+                          disabled={deletingId === doc.latest_version_id}
+                          className="text-xs font-medium text-ink-300 hover:text-red-600 disabled:opacity-50 transition-colors"
+                          title="Supprimer ce document"
+                        >
+                          {deletingId === doc.latest_version_id ? "…" : "Supprimer"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
