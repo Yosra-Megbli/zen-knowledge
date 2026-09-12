@@ -312,7 +312,7 @@ export default function DocumentsPage() {
                         </button>
                       ) : doc.latest_version_id ? (
                         <a
-                          href={`/api/documents/${doc.latest_version_id}/file`}
+                          href={`/documents/${doc.latest_version_id}/preview`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
