@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, CalendarClock } from "lucide-react";
 
 interface ActivityRow {
   action: string;
@@ -19,6 +19,7 @@ interface Stats {
   feedback: { useful: number; not_useful: number };
   refusals: { question_length: number; created_at: string }[];
   recent: { rows: ActivityRow[]; page: number; hasNextPage: boolean };
+  overdueDocuments: { id: string; version_id: string; title: string; review_date: string; owner_email: string }[];
 }
 
 const USD_FORMATTER = new Intl.NumberFormat("fr-FR", {
@@ -88,7 +89,7 @@ export default function AdminPage() {
   if (error) return <div className="text-center text-red-500 py-20">{error}</div>;
   if (!stats) return null;
 
-  const { companyName, totals, estimatedCostUsd, feedback, refusals, recent } = stats;
+  const { companyName, totals, estimatedCostUsd, feedback, refusals, recent, overdueDocuments } = stats;
   const refusalRate = totals.total > 0 ? Math.round((refusals.length / totals.total) * 100) : 0;
   const feedbackTotal = feedback.useful + feedback.not_useful;
   const feedbackRate = feedbackTotal > 0 ? Math.round((feedback.useful / feedbackTotal) * 100) : null;
@@ -126,7 +127,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
       <div>
         <h1 className="font-display text-3xl font-bold text-ink-950 tracking-tight">Administration</h1>
         {companyName && (
@@ -189,12 +190,90 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* Documents à réviser */}
+      <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-ink-100 flex items-center gap-2">
+          <CalendarClock size={15} className="text-orange-500" />
+          <h2 className="font-medium text-ink-700">Documents à réviser</h2>
+          {overdueDocuments.length > 0 && (
+            <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200">
+              {overdueDocuments.length}
+            </span>
+          )}
+        </div>
+        {overdueDocuments.length === 0 ? (
+          <div className="px-5 py-4 flex items-center gap-2 text-sm text-ink-500">
+            <CheckCircle2 size={16} className="text-lime-600" />
+            Tous les documents publiés sont à jour.
+          </div>
+        ) : (
+          <>
+            {/* Mobile cards */}
+            <ul className="sm:hidden divide-y divide-ink-100">
+              {overdueDocuments.map((doc) => (
+                <li key={doc.id} className="px-4 py-3">
+                  <a
+                    href={`/documents/${doc.version_id}/preview`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-sm text-ink-900 hover:text-lime-700 transition-colors"
+                  >
+                    {doc.title}
+                  </a>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-ink-400">
+                    <span className="text-orange-700 font-medium">
+                      {new Date(doc.review_date).toLocaleDateString("fr-FR")} · Dépassée
+                    </span>
+                    <span>{doc.owner_email}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-paper-100 border-b border-ink-100">
+                  <tr>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Document</th>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Date de révision</th>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Propriétaire</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {overdueDocuments.map((doc) => (
+                    <tr key={doc.id} className="hover:bg-paper-100">
+                      <td className="px-5 py-3">
+                        <a
+                          href={`/documents/${doc.version_id}/preview`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-ink-900 hover:text-lime-700 transition-colors"
+                        >
+                          {doc.title}
+                        </a>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                          {new Date(doc.review_date).toLocaleDateString("fr-FR")} · Dépassée
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* Activité récente */}
       <div className={`bg-white rounded-2xl border border-ink-100 overflow-hidden ${activityLoading ? "opacity-60" : ""}`}>
         <div className="px-5 py-4 border-b border-ink-100">
           <h2 className="font-medium text-ink-700">Activité récente</h2>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[600px] text-sm">
           <thead className="bg-paper-100 border-b border-ink-100">
             <tr>
               <th className="text-left px-5 py-3 font-medium text-ink-300">Action</th>
@@ -232,6 +311,7 @@ export default function AdminPage() {
             })}
           </tbody>
         </table>
+        </div>
         <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between">
           <button
             onClick={() => setActivityPage((p) => Math.max(1, p - 1))}

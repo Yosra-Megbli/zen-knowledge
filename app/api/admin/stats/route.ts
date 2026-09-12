@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const offset = (page - 1) * ACTIVITY_PAGE_SIZE;
 
   const data = await withAuthContext(ctx, async (client) => {
-    const [company, totals, costRows, feedbackRows, refusals, recent] = await Promise.all([
+    const [company, totals, costRows, feedbackRows, refusals, recent, overdue] = await Promise.all([
       client.query<{ name: string }>(`SELECT name FROM companies WHERE id = $1`, [ctx.companyId]),
       client.query<{ total: number; answers: number; errors: number; total_tokens: number | null }>(`
         SELECT
@@ -75,6 +75,23 @@ export async function GET(request: Request) {
         ORDER BY al.created_at DESC
         LIMIT $1 OFFSET $2
       `, [ACTIVITY_PAGE_SIZE + 1, offset]),
+      // Documents whose review date has passed and are still published —
+      // scoped to the caller's company by RLS (no WHERE company_id needed).
+      client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string }>(`
+        SELECT
+          d.id,
+          v.id AS version_id,
+          d.title,
+          d.review_date,
+          u.email AS owner_email
+        FROM documents d
+        JOIN document_versions v ON v.document_id = d.id AND v.status = 'published'
+        JOIN users u ON u.id = v.uploaded_by
+        WHERE d.status = 'published'
+          AND d.review_date IS NOT NULL
+          AND d.review_date < NOW()
+        ORDER BY d.review_date ASC
+      `),
     ]);
 
     const estimatedCostUsd = costRows.rows.reduce(
@@ -95,6 +112,7 @@ export async function GET(request: Request) {
       feedback: feedbackByRating,
       refusals: refusals.rows,
       recent: { rows: recentRows, page, hasNextPage },
+      overdueDocuments: overdue.rows,
     };
   });
 

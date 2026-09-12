@@ -110,7 +110,7 @@ export default async function DocumentPreviewPage({
   ];
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
       <Link
         href="/documents"
         className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-lime-700 transition-colors mb-6"

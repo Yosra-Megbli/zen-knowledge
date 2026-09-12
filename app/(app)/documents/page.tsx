@@ -168,7 +168,7 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="font-display text-2xl sm:text-3xl font-bold text-ink-950 tracking-tight">Bibliothèque de documents</h1>
         <button
@@ -180,34 +180,36 @@ export default function DocumentsPage() {
       </div>
 
       {!loading && docs.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 mb-4">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un document…"
-            className="flex-1 min-w-[200px] border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
+            className="w-full sm:flex-1 sm:min-w-[200px] border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
           />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
-          >
-            <option value="all">Tous les statuts</option>
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <select
-            value={visibilityFilter}
-            onChange={(e) => setVisibilityFilter(e.target.value)}
-            className="border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
-          >
-            <option value="all">Toutes les visibilités</option>
-            {Object.entries(VISIBILITY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <span className="text-xs text-ink-300 whitespace-nowrap">
+          <div className="flex gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="flex-1 sm:flex-none border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
+            >
+              <option value="all">Tous les statuts</option>
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <select
+              value={visibilityFilter}
+              onChange={(e) => setVisibilityFilter(e.target.value)}
+              className="flex-1 sm:flex-none border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
+            >
+              <option value="all">Toutes visibilités</option>
+              {Object.entries(VISIBILITY_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <span className="text-xs text-ink-300 whitespace-nowrap self-center">
             {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -220,127 +222,235 @@ export default function DocumentsPage() {
       ) : filteredDocs.length === 0 ? (
         <div className="text-center text-ink-300 py-20">Aucun document ne correspond à ces critères.</div>
       ) : (
-        <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-paper-100 border-b border-ink-100">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-ink-500">Titre</th>
-                <th className="text-left px-4 py-3 font-medium text-ink-500">Visibilité</th>
-                <th className="text-left px-4 py-3 font-medium text-ink-500">Statut</th>
-                <th className="text-left px-4 py-3 font-medium text-ink-500">Version</th>
-                <th className="text-left px-4 py-3 font-medium text-ink-500">Propriétaire</th>
-                <th className="text-left px-4 py-3 font-medium text-ink-500">Révision</th>
-                <th className="text-left px-4 py-3 font-medium text-ink-500">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-100">
-              {filteredDocs.map((doc) => (
-                <tr key={doc.id} className="hover:bg-paper-100 transition-colors">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ink-950">{doc.title}</p>
-                    {doc.description && (
-                      <p className="text-xs text-ink-300 truncate max-w-xs">{doc.description}</p>
-                    )}
-                    {doc.latest_status === "failed" && doc.latest_error_message && (
-                      <p className="text-xs text-red-500 truncate max-w-xs" title={doc.latest_error_message}>
-                        {doc.latest_error_message}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {VISIBILITY_COLORS[doc.visibility] ? (
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility]}`}>
-                        {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+        <>
+          {/* ── Mobile cards (< sm) ─────────────────────────────── */}
+          <div className="sm:hidden flex flex-col gap-3">
+            {filteredDocs.map((doc) => {
+              const status = doc.latest_status ?? doc.status;
+              const isOverdue =
+                doc.status === "published" &&
+                doc.review_date != null &&
+                new Date(doc.review_date) < new Date();
+              return (
+                <div key={doc.id} className="bg-white rounded-2xl border border-ink-100 p-4">
+                  {/* Title + badges row */}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-ink-950 truncate">{doc.title}</p>
+                      {doc.description && (
+                        <p className="text-xs text-ink-300 truncate mt-0.5">{doc.description}</p>
+                      )}
+                      {doc.latest_status === "failed" && doc.latest_error_message && (
+                        <p className="text-xs text-red-500 truncate mt-0.5" title={doc.latest_error_message}>
+                          {doc.latest_error_message}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] ?? "bg-ink-100 text-ink-500"}`}>
+                        {status}
                       </span>
-                    ) : (
-                      <span className="text-ink-500">{VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}</span>
+                      {VISIBILITY_COLORS[doc.visibility] ? (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility]}`}>
+                          {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-ink-400">{VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Meta row */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-400 mb-3">
+                    <span>{doc.owner_email}</span>
+                    {doc.latest_version && (
+                      <span>
+                        v{doc.latest_version}
+                        {doc.version_count > 1 && <span className="text-ink-300 ml-1">({doc.version_count})</span>}
+                      </span>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[doc.latest_status ?? doc.status] ?? "bg-ink-100 text-ink-500"}`}>
-                      {doc.latest_status ?? doc.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-ink-500">
-                    {doc.latest_version ? `v${doc.latest_version}` : "—"}
-                    {doc.version_count > 1 && (
-                      <span className="text-xs text-ink-300 ml-1">({doc.version_count} versions)</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
-                  <td className="px-4 py-3 text-xs">
-                    {doc.review_date ? (
+                    {doc.review_date && (
                       <span
                         className={
-                          doc.status === "published" && new Date(doc.review_date) < new Date()
+                          isOverdue
                             ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
-                            : "text-ink-500"
-                        }
-                        title={
-                          doc.status === "published" && new Date(doc.review_date) < new Date()
-                            ? "Date de révision dépassée — voir W3 (obsolescence)"
-                            : undefined
+                            : ""
                         }
                       >
                         {new Date(doc.review_date).toLocaleDateString("fr-FR")}
-                        {doc.status === "published" && new Date(doc.review_date) < new Date() && " · Révision dépassée"}
+                        {isOverdue && " · Révision dépassée"}
                       </span>
-                    ) : (
-                      <span className="text-ink-500">—</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {doc.latest_status === "ready" && doc.latest_version_id ? (
-                        <button
-                          onClick={() => handlePublish(doc.latest_version_id!)}
-                          disabled={publishingId === doc.latest_version_id}
-                          className="text-xs font-medium text-lime-600 hover:text-lime-800 disabled:opacity-50 transition-colors"
-                          title="Rend cette version visible dans le chat (recherche RAG)"
-                        >
-                          {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
-                        </button>
-                      ) : doc.latest_status === "failed" && doc.latest_version_id ? (
-                        <button
-                          onClick={() => handleRetry(doc.latest_version_id!)}
-                          disabled={retryingId === doc.latest_version_id}
-                          className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
-                          title="Relance l'extraction/l'indexation à partir du même fichier"
-                        >
-                          {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
-                        </button>
-                      ) : doc.latest_version_id ? (
-                        <a
-                          href={`/documents/${doc.latest_version_id}/preview`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
-                          title="Voir le document"
-                        >
-                          Voir <ExternalLink size={12} strokeWidth={2} />
-                        </a>
-                      ) : (
-                        <span className="text-xs text-ink-300">—</span>
-                      )}
-                      {doc.latest_version_id && (
-                        <button
-                          onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
-                          disabled={deletingId === doc.latest_version_id}
-                          className="text-xs font-medium text-ink-300 hover:text-red-600 disabled:opacity-50 transition-colors"
-                          title="Supprimer ce document"
-                        >
-                          {deletingId === doc.latest_version_id ? "…" : "Supprimer"}
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-3 border-t border-ink-50 pt-3">
+                    {doc.latest_status === "ready" && doc.latest_version_id ? (
+                      <button
+                        onClick={() => handlePublish(doc.latest_version_id!)}
+                        disabled={publishingId === doc.latest_version_id}
+                        className="text-xs font-medium text-lime-600 hover:text-lime-800 disabled:opacity-50 transition-colors"
+                      >
+                        {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
+                      </button>
+                    ) : doc.latest_status === "failed" && doc.latest_version_id ? (
+                      <button
+                        onClick={() => handleRetry(doc.latest_version_id!)}
+                        disabled={retryingId === doc.latest_version_id}
+                        className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+                      >
+                        {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
+                      </button>
+                    ) : doc.latest_version_id ? (
+                      <a
+                        href={`/documents/${doc.latest_version_id}/preview`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
+                      >
+                        Voir <ExternalLink size={12} strokeWidth={2} />
+                      </a>
+                    ) : (
+                      <span className="text-xs text-ink-300">—</span>
+                    )}
+                    {doc.latest_version_id && (
+                      <button
+                        onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
+                        disabled={deletingId === doc.latest_version_id}
+                        className="text-xs font-medium text-ink-300 hover:text-red-600 disabled:opacity-50 transition-colors ml-auto"
+                      >
+                        {deletingId === doc.latest_version_id ? "…" : "Supprimer"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+
+          {/* ── Desktop table (sm+) ──────────────────────────────── */}
+          <div className="hidden sm:block bg-white rounded-2xl border border-ink-100 overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-paper-100 border-b border-ink-100">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-ink-500">Titre</th>
+                  <th className="text-left px-4 py-3 font-medium text-ink-500">Visibilité</th>
+                  <th className="text-left px-4 py-3 font-medium text-ink-500">Statut</th>
+                  <th className="text-left px-4 py-3 font-medium text-ink-500">Version</th>
+                  <th className="text-left px-4 py-3 font-medium text-ink-500">Propriétaire</th>
+                  <th className="text-left px-4 py-3 font-medium text-ink-500">Révision</th>
+                  <th className="text-left px-4 py-3 font-medium text-ink-500">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {filteredDocs.map((doc) => (
+                  <tr key={doc.id} className="hover:bg-paper-100 transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ink-950">{doc.title}</p>
+                      {doc.description && (
+                        <p className="text-xs text-ink-300 truncate max-w-xs">{doc.description}</p>
+                      )}
+                      {doc.latest_status === "failed" && doc.latest_error_message && (
+                        <p className="text-xs text-red-500 truncate max-w-xs" title={doc.latest_error_message}>
+                          {doc.latest_error_message}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {VISIBILITY_COLORS[doc.visibility] ? (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility]}`}>
+                          {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                        </span>
+                      ) : (
+                        <span className="text-ink-500">{VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[doc.latest_status ?? doc.status] ?? "bg-ink-100 text-ink-500"}`}>
+                        {doc.latest_status ?? doc.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-ink-500">
+                      {doc.latest_version ? `v${doc.latest_version}` : "—"}
+                      {doc.version_count > 1 && (
+                        <span className="text-xs text-ink-300 ml-1">({doc.version_count} versions)</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {doc.review_date ? (
+                        <span
+                          className={
+                            doc.status === "published" && new Date(doc.review_date) < new Date()
+                              ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
+                              : "text-ink-500"
+                          }
+                          title={
+                            doc.status === "published" && new Date(doc.review_date) < new Date()
+                              ? "Date de révision dépassée — voir W3 (obsolescence)"
+                              : undefined
+                          }
+                        >
+                          {new Date(doc.review_date).toLocaleDateString("fr-FR")}
+                          {doc.status === "published" && new Date(doc.review_date) < new Date() && " · Révision dépassée"}
+                        </span>
+                      ) : (
+                        <span className="text-ink-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {doc.latest_status === "ready" && doc.latest_version_id ? (
+                          <button
+                            onClick={() => handlePublish(doc.latest_version_id!)}
+                            disabled={publishingId === doc.latest_version_id}
+                            className="text-xs font-medium text-lime-600 hover:text-lime-800 disabled:opacity-50 transition-colors"
+                            title="Rend cette version visible dans le chat (recherche RAG)"
+                          >
+                            {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
+                          </button>
+                        ) : doc.latest_status === "failed" && doc.latest_version_id ? (
+                          <button
+                            onClick={() => handleRetry(doc.latest_version_id!)}
+                            disabled={retryingId === doc.latest_version_id}
+                            className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+                            title="Relance l'extraction/l'indexation à partir du même fichier"
+                          >
+                            {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
+                          </button>
+                        ) : doc.latest_version_id ? (
+                          <a
+                            href={`/documents/${doc.latest_version_id}/preview`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
+                            title="Voir le document"
+                          >
+                            Voir <ExternalLink size={12} strokeWidth={2} />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-ink-300">—</span>
+                        )}
+                        {doc.latest_version_id && (
+                          <button
+                            onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
+                            disabled={deletingId === doc.latest_version_id}
+                            className="text-xs font-medium text-ink-300 hover:text-red-600 disabled:opacity-50 transition-colors"
+                            title="Supprimer ce document"
+                          >
+                            {deletingId === doc.latest_version_id ? "…" : "Supprimer"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Upload Modal */}
