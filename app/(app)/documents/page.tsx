@@ -45,6 +45,12 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "bg-red-100 text-red-700",
 };
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
 export default function DocumentsPage() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,10 +64,13 @@ export default function DocumentsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [visibilityFilter, setVisibilityFilter] = useState("all");
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState({
     title: "",
     description: "",
     visibility: "company" as "company" | "department" | "restricted",
+    departmentId: "",
+    reviewDate: "",
     file: null as File | null,
   });
 
@@ -78,6 +87,11 @@ export default function DocumentsPage() {
     // fetchDocs(), whose own setState calls happen after the async fetch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDocs();
+
+    fetch("/api/departments")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setDepartments(Array.isArray(data) ? data : []))
+      .catch(() => setDepartments([]));
   }, [fetchDocs]);
 
   // Client-side only — /api/documents/list already scopes results to
@@ -104,17 +118,38 @@ export default function DocumentsPage() {
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     if (!form.file || !form.title.trim()) return;
+
+    if (form.visibility === "department" && !form.departmentId) {
+      setError("Veuillez sélectionner un département pour la visibilité départementale.");
+      return;
+    }
+
     setUploading(true);
     setError(null);
     const fd = new FormData();
     fd.append("file", form.file);
-    fd.append("title", form.title);
-    fd.append("description", form.description);
+    fd.append("title", form.title.trim());
+    if (form.description.trim()) fd.append("description", form.description.trim());
     fd.append("visibility", form.visibility);
+    if (form.visibility === "department" && form.departmentId) {
+      fd.append("departmentId", form.departmentId);
+    }
+    if (form.reviewDate) {
+      fd.append("reviewDate", form.reviewDate);
+    }
+
     const res = await fetch("/api/documents/upload", { method: "POST", body: fd });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>);
     if (!res.ok) {
-      setError(data.error ?? "Erreur lors de l'upload.");
+      const errCode = (data.errorCode ?? data.code) as string | undefined;
+      const errMsg = (data.errorMessage ?? data.error) as string | undefined;
+      if (errCode === "NO_EXTRACTABLE_TEXT" || errMsg?.includes("scanned/image-only")) {
+        setError(
+          "Ce PDF ne contient pas de couche texte exploitable. Il s'agit probablement d'un document scanné. Les PDF scannés nécessitent actuellement une étape OCR qui n'est pas disponible dans cette version."
+        );
+      } else {
+        setError(errMsg || "Erreur lors de l'upload.");
+      }
     } else {
       // Deliberately NOT auto-published here: upload only runs
       // extraction/chunking/embeddings (status becomes "ready" on
@@ -122,7 +157,7 @@ export default function DocumentsPage() {
       // handlePublish — so a reviewer always sees new content before
       // it becomes visible to chat/retrieval.
       setShowModal(false);
-      setForm({ title: "", description: "", visibility: "company", file: null });
+      setForm({ title: "", description: "", visibility: "company", departmentId: "", reviewDate: "", file: null });
       fetchDocs();
     }
     setUploading(false);
@@ -499,7 +534,7 @@ export default function DocumentsPage() {
       {/* Upload Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold mb-4">Nouveau document</h2>
             <form onSubmit={handleUpload} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
@@ -531,21 +566,66 @@ export default function DocumentsPage() {
                   <option value="restricted">Restreint</option>
                 </select>
               </div>
+              {form.visibility === "department" && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-ink-700">Département *</label>
+                  {departments.length === 0 ? (
+                    <p className="text-xs text-ink-500 bg-paper-100 rounded-lg p-2.5">
+                      Aucun département configuré pour votre entreprise.
+                    </p>
+                  ) : (
+                    <select
+                      required
+                      value={form.departmentId}
+                      onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value }))}
+                      className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
+                    >
+                      <option value="">Sélectionnez un département</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ink-700">Fichier PDF *</label>
+                <label className="text-sm font-medium text-ink-700">Date de révision</label>
+                <input
+                  type="date"
+                  value={form.reviewDate}
+                  onChange={(e) => setForm((f) => ({ ...f, reviewDate: e.target.value }))}
+                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
+                />
+                <p className="text-xs text-ink-400">Facultatif — utilisé pour le suivi d&apos;obsolescence.</p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-ink-700">Fichier (PDF ou TXT) *</label>
                 <input
                   type="file"
-                  accept=".pdf,.txt,.md"
+                  accept=".pdf,.txt"
                   required
                   onChange={(e) => setForm((f) => ({ ...f, file: e.target.files?.[0] ?? null }))}
                   className="text-sm text-ink-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-lime-50 file:text-lime-700 hover:file:bg-lime-100"
                 />
+                <p className="text-xs text-ink-400">Formats acceptés : PDF, TXT (max 20 Mo)</p>
+                {form.file && (
+                  <div className="flex items-center justify-between text-xs bg-paper-100 border border-ink-100 rounded-lg px-3 py-2 text-ink-700 mt-1">
+                    <span className="truncate font-medium">{form.file.name}</span>
+                    <span className="shrink-0 text-ink-400 ml-2">{formatFileSize(form.file.size)}</span>
+                  </div>
+                )}
               </div>
               {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => { setShowModal(false); setError(null); }}
+                  onClick={() => {
+                    setShowModal(false);
+                    setError(null);
+                    setForm({ title: "", description: "", visibility: "company", departmentId: "", reviewDate: "", file: null });
+                  }}
                   className="flex-1 border border-ink-100 rounded-lg py-2 text-sm font-medium text-ink-500 hover:bg-paper-100 transition-colors"
                 >
                   Annuler

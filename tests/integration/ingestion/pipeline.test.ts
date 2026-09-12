@@ -27,12 +27,27 @@ function ctxFor(company: "Acme Corp" | "Nova Bank", role: "admin" | "contributor
   return { userId: user.id, companyId: f.companies[company], role, departmentId: user.department_id };
 }
 
-async function ingest(ctx: AuthContext, fixtureName: string, overrides: Partial<{ title: string; visibility: "company" | "department" | "restricted" }> = {}) {
+async function ingest(
+  ctx: AuthContext,
+  fixtureName: string,
+  overrides: Partial<{
+    title: string;
+    visibility: "company" | "department" | "restricted";
+    departmentId: string | null;
+    reviewDate: string | null;
+  }> = {}
+) {
   return ingestDocument({
     ctx,
     fileName: fixtureName,
     data: readFixture(fixtureName),
-    target: { kind: "new", title: overrides.title ?? `Test — ${fixtureName} — ${Date.now()}`, visibility: overrides.visibility ?? "company" },
+    target: {
+      kind: "new",
+      title: overrides.title ?? `Test — ${fixtureName} — ${Date.now()}`,
+      visibility: overrides.visibility ?? "company",
+      departmentId: overrides.departmentId ?? null,
+      reviewDate: overrides.reviewDate ?? null,
+    },
     triggeredBy: "test",
   });
 }
@@ -281,4 +296,37 @@ test("employee cannot publish a document", async () => {
     () => publishVersion(employeeCtx, result.documentVersionId),
     (err: unknown) => err instanceof IngestionForbiddenError
   );
+});
+
+// ---- Metadata fields: review_date and department_id ----
+test("review_date is persisted when supplied during ingestion", async () => {
+  const ctx = ctxFor("Acme Corp", "admin");
+  const reviewDate = "2026-12-31";
+  const result = await ingest(ctx, "valid.txt", { reviewDate });
+  assert.equal(result.status, "completed");
+
+  const client = await getMigrationClient();
+  try {
+    const doc = await client.query(`SELECT review_date::text FROM documents WHERE id = $1`, [result.documentId]);
+    assert.equal(doc.rows[0].review_date, reviewDate);
+  } finally {
+    await client.end();
+  }
+});
+
+test("department_id is persisted when visibility is department", async () => {
+  const ctx = ctxFor("Acme Corp", "admin");
+  const deptId = f.departments["Acme Corp:RH"];
+  assert.ok(deptId, "department fixture must exist");
+  const result = await ingest(ctx, "valid.txt", { visibility: "department", departmentId: deptId });
+  assert.equal(result.status, "completed");
+
+  const client = await getMigrationClient();
+  try {
+    const doc = await client.query(`SELECT department_id, visibility FROM documents WHERE id = $1`, [result.documentId]);
+    assert.equal(doc.rows[0].department_id, deptId);
+    assert.equal(doc.rows[0].visibility, "department");
+  } finally {
+    await client.end();
+  }
 });

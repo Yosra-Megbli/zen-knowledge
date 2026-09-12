@@ -28,8 +28,10 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const warningDays = Math.max(1, Number(url.searchParams.get("warningDays") ?? 7));
-  const graceDays = Math.max(1, Number(url.searchParams.get("graceDays") ?? 30));
+  const rawWarningDays = Number(url.searchParams.get("warningDays") ?? 7);
+  const warningDays = Number.isFinite(rawWarningDays) ? Math.floor(Math.max(1, Math.min(365, rawWarningDays))) : 7;
+  const rawGraceDays = Number(url.searchParams.get("graceDays") ?? 30);
+  const graceDays = Number.isFinite(rawGraceDays) ? Math.floor(Math.max(1, Math.min(365, rawGraceDays))) : 30;
 
   const pool = getAppPool();
   const client = await pool.connect();
@@ -47,7 +49,7 @@ export async function GET(request: Request) {
       task_notified_at: string | null;
       task_reminded_at: string | null;
     }>(
-      `SELECT * FROM w3_get_review_due_documents($1)`,
+      `SELECT * FROM w3_get_review_due_documents($1::int)`,
       [warningDays]
     );
 

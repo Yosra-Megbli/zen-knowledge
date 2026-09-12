@@ -25,6 +25,13 @@ test("7 — unsupported file type is rejected explicitly", () => {
   );
 });
 
+test("Markdown (.md) is rejected as unsupported file type", () => {
+  assert.throws(
+    () => validateUploadedFile("readme.md", Buffer.from("# Markdown content")),
+    (err: unknown) => err instanceof IngestionError && err.code === "UNSUPPORTED_FILE_TYPE"
+  );
+});
+
 test("8 — empty file is rejected explicitly", () => {
   assert.throws(
     () => validateUploadedFile("empty.txt", Buffer.alloc(0)),
