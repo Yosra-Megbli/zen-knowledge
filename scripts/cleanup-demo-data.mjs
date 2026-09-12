@@ -237,6 +237,40 @@ async function run() {
 
     await cleanupConversations(client, apply);
 
+    // ── Section: Normalisation du document « yosra » ─────────────────────────
+    // Renomme le document de test 'yosra' en 'Gestion des incidents clients'
+    // avec description in-world. Sa review_date est mise à '2027-09-04' (sain)
+    // sauf si --keep-overdue est spécifié (pour démo W3).
+    const keepOverdue = process.argv.includes("--keep-overdue");
+    const yosraRows = await client.query(
+      `SELECT id, title, review_date, status FROM documents WHERE title = 'yosra'`
+    );
+    if (yosraRows.rows.length === 0) {
+      console.log("\nNormalisation 'yosra' : aucun document avec title='yosra' trouvé (déjà normalisé ou absent).");
+    } else {
+      const doc = yosraRows.rows[0];
+      const targetReviewDate = keepOverdue ? doc.review_date : '2027-09-04';
+      console.log(apply ? `\nNormalisation du document "yosra" (id: ${doc.id})...` : `\n[dry-run] would normalize document "yosra" (id: ${doc.id})`);
+      console.log(`  Nouveau titre : 'Gestion des incidents clients'`);
+      console.log(`  Nouvelle description : 'Procédure de traitement et de suivi des incidents clients.'`);
+      console.log(`  Date de révision cible : ${targetReviewDate} ${keepOverdue ? '(--keep-overdue actif)' : '(mis à jour vers 2027-09-04)'}`);
+      if (apply) {
+        const normRes = await client.query(`
+          UPDATE documents
+          SET 
+            title = 'Gestion des incidents clients',
+            description = 'Procédure de traitement et de suivi des incidents clients.',
+            status = 'published',
+            deleted_at = NULL,
+            review_date = $1,
+            updated_at = now()
+          WHERE title = 'yosra'
+          RETURNING id, title, status, review_date
+        `, [targetReviewDate]);
+        console.log(`  ✓ normalisé (${normRes.rowCount} document row) : "${normRes.rows[0].title}"`);
+      }
+    }
+
     console.log("\nDone.");
   } finally {
     await client.end();
