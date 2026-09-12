@@ -52,7 +52,7 @@ export interface RagRefusal {
 
 export type RagResult = RagAnswer | RagRefusal;
 
-const REFUSAL_MESSAGE =
+export const REFUSAL_MESSAGE =
   "I don't have enough authorized sources to answer this question.";
 
 /**
@@ -139,11 +139,22 @@ export async function answerQuestion(ctx: AuthContext, question: string): Promis
   // ── 5. Extract and validate citations ─────────────────────────────
   const citations = extractCitations(llmResponse.content, sources, retrieval.chunks);
 
+  // The model can pass the pre-LLM similarity gate (chunks existed,
+  // scored above RAG_MIN_SIMILARITY) and still correctly decide, per
+  // system prompt rule 2, that none of them actually answer THIS
+  // question — a real, user-visible refusal, just one that happens
+  // after the LLM call instead of before it. Only an EXACT match
+  // counts (never a partial/hedged answer) so this can't misclassify
+  // a real answer that merely mentions the phrase. Audit-classification
+  // only: retrieval, the LLM call, and the returned RagAnswer are
+  // unchanged — the chat UI still renders this turn exactly as before.
+  const isLateRefusal = llmResponse.content.trim() === REFUSAL_MESSAGE;
+
   // ── 6. Audit ──────────────────────────────────────────────────────
   await writeRagAudit(ctx, {
-    action: "rag_answer",
+    action: isLateRefusal ? "rag_refusal" : "rag_answer",
     sourceCount: retrieval.chunks.length,
-    refusal: false,
+    refusal: isLateRefusal,
     modelUsed: llmResponse.model,
     latencyMs: llmResponse.latencyMs,
     promptTokens: llmResponse.usage?.promptTokens ?? null,

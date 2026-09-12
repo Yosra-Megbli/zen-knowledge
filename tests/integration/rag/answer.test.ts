@@ -14,7 +14,7 @@
 //   - Prompt injection in document content is passed as data, not executed.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { answerQuestion } from "../../../lib/rag/answerQuestion.ts";
+import { answerQuestion, REFUSAL_MESSAGE } from "../../../lib/rag/answerQuestion.ts";
 import { setLlmProvider } from "../../../lib/llm/index.ts";
 import { LlmError } from "../../../lib/llm/types.ts";
 import type { LlmProvider, LlmRequest, LlmResponse } from "../../../lib/llm/types.ts";
@@ -455,6 +455,56 @@ test("R — audit record metadata never contains GROQ_API_KEY value", async () =
       const metaStr = JSON.stringify(rows.rows[0].metadata);
       assert.ok(!metaStr.includes("sk-audit-leak-test"), "API key must never appear in audit metadata");
     }
+  } finally {
+    await client.end();
+  }
+});
+
+test("S — a post-retrieval LLM refusal (sources existed but didn't answer the question) is audited as rag_refusal, not rag_answer", async () => {
+  // Sources pass the similarity gate (LLM IS called — unlike tests F/G,
+  // which never reach the LLM at all), but the model itself decides,
+  // per system prompt rule 2, that none of them actually answer this
+  // question and replies with the exact refusal phrase. This must be
+  // classified as a refusal for the admin KPI, not a successful answer.
+  setLlmProvider(makeMockProvider(REFUSAL_MESSAGE));
+
+  const { getMigrationClient } = await import("../../../db/db.mjs");
+  const client = await getMigrationClient();
+  try {
+    const result = await answerQuestion(ctx("Acme Corp", "admin"), "onboarding guide intégration");
+
+    // The API contract / chat UI behavior is unchanged by this fix —
+    // still a normal (non-pre-LLM) RagAnswer, not RagRefusal.
+    assert.equal(result.refusal, false);
+    assert.equal(result.answer, REFUSAL_MESSAGE);
+
+    const rows = await client.query(
+      `SELECT action, metadata FROM audit_logs WHERE company_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [f.companies["Acme Corp"]]
+    );
+    assert.equal(rows.rows[0].action, "rag_refusal", "must be counted as a refusal for the admin KPI");
+    assert.equal(rows.rows[0].metadata.refusal, true);
+  } finally {
+    await client.end();
+  }
+});
+
+test("T — a real answer that merely happens to cite sources is never misclassified as a refusal", async () => {
+  // Guards the exact-match requirement: only the literal refusal
+  // phrase counts, never a normal answer (even one discussing
+  // "sources" or "authorization" as its actual subject matter).
+  setLlmProvider(makeMockProvider("Le processus est décrit en détail dans les sources autorisées [SOURCE 1]."));
+
+  const { getMigrationClient } = await import("../../../db/db.mjs");
+  const client = await getMigrationClient();
+  try {
+    await answerQuestion(ctx("Acme Corp", "admin"), "onboarding guide intégration");
+
+    const rows = await client.query(
+      `SELECT action FROM audit_logs WHERE company_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [f.companies["Acme Corp"]]
+    );
+    assert.equal(rows.rows[0].action, "rag_answer");
   } finally {
     await client.end();
   }
