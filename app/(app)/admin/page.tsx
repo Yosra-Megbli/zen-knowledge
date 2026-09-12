@@ -1,14 +1,30 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MessageSquareText, Sparkles, ShieldAlert, Coins, ChevronDown, CheckCircle2 } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ShieldAlert, Coins, ChevronDown, CheckCircle2 } from "lucide-react";
 
 interface Stats {
   companyName: string | null;
   totals: { total: number; answers: number; errors: number; total_tokens: number | null };
+  estimatedCostUsd: number;
+  feedback: { useful: number; not_useful: number };
   refusals: { question_length: number; created_at: string }[];
-  recent: { action: string; model: string | null; latency_ms: number | null; source_count: number; created_at: string }[];
+  recent: {
+    action: string;
+    model: string | null;
+    latency_ms: number | null;
+    source_count: number;
+    main_document_title: string | null;
+    created_at: string;
+  }[];
 }
+
+const USD_FORMATTER = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
 
 // Compact "il y a X" phrasing for the recent-activity table — a raw
 // timestamp on every row forces the reader to do the subtraction
@@ -56,21 +72,23 @@ export default function AdminPage() {
   if (error) return <div className="text-center text-red-500 py-20">{error}</div>;
   if (!stats) return null;
 
-  const { companyName, totals, refusals, recent } = stats;
+  const { companyName, totals, estimatedCostUsd, feedback, refusals, recent } = stats;
   const refusalRate = totals.total > 0 ? Math.round((refusals.length / totals.total) * 100) : 0;
+  const feedbackTotal = feedback.useful + feedback.not_useful;
+  const feedbackRate = feedbackTotal > 0 ? Math.round((feedback.useful / feedbackTotal) * 100) : null;
 
   const kpis = [
     {
-      label: "Requêtes totales",
-      value: totals.total,
-      icon: MessageSquareText,
-      sub: "Questions posées au corpus",
+      label: "Coût estimé",
+      value: USD_FORMATTER.format(estimatedCostUsd),
+      icon: CircleDollarSign,
+      sub: "Tarifs Groq — gpt-oss-120b",
     },
     {
-      label: "Réponses générées",
-      value: totals.answers,
-      icon: Sparkles,
-      sub: "Générées depuis sources autorisées",
+      label: "Feedback",
+      value: `👍 ${feedback.useful} · 👎 ${feedback.not_useful}`,
+      icon: ThumbsUp,
+      sub: feedbackRate !== null ? `${feedbackRate}% positif` : "Aucun retour pour le moment",
     },
     {
       label: "Refus (no-source)",
@@ -161,7 +179,7 @@ export default function AdminPage() {
               <th className="text-left px-5 py-3 font-medium text-ink-300">Action</th>
               <th className="text-left px-5 py-3 font-medium text-ink-300">Modèle</th>
               <th className="text-left px-5 py-3 font-medium text-ink-300">Latence</th>
-              <th className="text-left px-5 py-3 font-medium text-ink-300">Sources</th>
+              <th className="text-left px-5 py-3 font-medium text-ink-300">Document principal</th>
               <th className="text-left px-5 py-3 font-medium text-ink-300">Date</th>
             </tr>
           </thead>
@@ -174,10 +192,14 @@ export default function AdminPage() {
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${a.color}`}>{a.label}</span>
                   </td>
                   <td className="px-5 py-3 text-ink-500 text-xs">{shortModelName(r.model)}</td>
-                  <td className="px-5 py-3 text-ink-500 text-xs">
+                  <td className={`px-5 py-3 text-xs ${r.latency_ms != null && r.latency_ms > 2000 ? "text-orange-600 font-medium" : "text-ink-500"}`}>
                     {r.latency_ms ? `${(r.latency_ms / 1000).toFixed(1)}s` : "—"}
                   </td>
-                  <td className="px-5 py-3 text-ink-500">{r.source_count}</td>
+                  <td className="px-5 py-3 text-ink-500 max-w-[220px] truncate" title={r.main_document_title ?? undefined}>
+                    {r.main_document_title
+                      ? `${r.main_document_title}${r.source_count > 1 ? ` (+${r.source_count - 1})` : ""}`
+                      : "—"}
+                  </td>
                   <td
                     className="px-5 py-3 text-ink-300 text-xs"
                     title={new Date(r.created_at).toLocaleString("fr-FR")}
