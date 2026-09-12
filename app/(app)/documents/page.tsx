@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { ExternalLink, Trash2, FileUp } from "lucide-react";
 
 interface Document {
   id: string;
@@ -534,8 +534,13 @@ export default function DocumentsPage() {
       {/* Upload Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-4">Nouveau document</h2>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border-t-4 border-lime-400">
+            <div className="flex items-center gap-2.5 mb-5">
+              <div className="w-9 h-9 rounded-xl bg-lime-400 flex items-center justify-center shrink-0">
+                <FileUp size={18} className="text-ink-900" />
+              </div>
+              <h2 className="text-lg font-semibold text-ink-900">Nouveau document</h2>
+            </div>
             <form onSubmit={handleUpload} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-ink-700">Titre *</label>
@@ -600,6 +605,7 @@ export default function DocumentsPage() {
                 />
                 <p className="text-xs text-ink-400">Facultatif — utilisé pour le suivi d&apos;obsolescence.</p>
               </div>
+              <hr className="border-ink-100 my-1" />
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-ink-700">Fichier (PDF ou TXT) *</label>
                 <input
@@ -607,7 +613,7 @@ export default function DocumentsPage() {
                   accept=".pdf,.txt"
                   required
                   onChange={(e) => setForm((f) => ({ ...f, file: e.target.files?.[0] ?? null }))}
-                  className="text-sm text-ink-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-lime-50 file:text-lime-700 hover:file:bg-lime-100"
+                  className="text-sm text-ink-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-lime-400 file:text-ink-900 hover:file:bg-lime-500"
                 />
                 <p className="text-xs text-ink-400">Formats acceptés : PDF, TXT (max 20 Mo)</p>
                 {form.file && (
@@ -626,7 +632,7 @@ export default function DocumentsPage() {
                     setError(null);
                     setForm({ title: "", description: "", visibility: "company", departmentId: "", reviewDate: "", file: null });
                   }}
-                  className="flex-1 border border-ink-100 rounded-lg py-2 text-sm font-medium text-ink-500 hover:bg-paper-100 transition-colors"
+                  className="flex-1 border border-ink-200 rounded-lg py-2 text-sm font-medium text-ink-700 hover:bg-paper-100 transition-colors"
                 >
                   Annuler
                 </button>
