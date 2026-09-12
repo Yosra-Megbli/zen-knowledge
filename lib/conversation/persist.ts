@@ -71,6 +71,41 @@ export async function persistTurn(
   });
 }
 
+// Hard delete — no soft-delete mechanism exists for conversations (unlike
+// documents), and there's no citation-style "keep the row for historical
+// display" requirement here: a deleted conversation should simply be
+// gone. Deletes children before parents (no ON DELETE CASCADE on
+// conversation_messages/citations/feedback — db/migrations/0006) inside
+// one transaction. Scoped to `id AND user_id = ctx.userId` in the SAME
+// query that finds the conversation, not a separate ownership check
+// after the fact — a conversation belonging to a same-company colleague
+// simply doesn't match and returns false, identical to "doesn't exist",
+// mirroring the 404-not-403 pattern already used by
+// GET /api/conversations/[id]/messages.
+export async function deleteConversation(ctx: AuthContext, conversationId: string): Promise<boolean> {
+  return withAuthContext(ctx, async (client) => {
+    const owned = await client.query<{ id: string }>(
+      `SELECT id FROM conversations WHERE id = $1 AND user_id = $2`,
+      [conversationId, ctx.userId]
+    );
+    if (owned.rowCount === 0) return false;
+
+    await client.query(
+      `DELETE FROM feedback WHERE message_id IN
+         (SELECT id FROM conversation_messages WHERE conversation_id = $1)`,
+      [conversationId]
+    );
+    await client.query(
+      `DELETE FROM citations WHERE message_id IN
+         (SELECT id FROM conversation_messages WHERE conversation_id = $1)`,
+      [conversationId]
+    );
+    await client.query(`DELETE FROM conversation_messages WHERE conversation_id = $1`, [conversationId]);
+    await client.query(`DELETE FROM conversations WHERE id = $1`, [conversationId]);
+    return true;
+  });
+}
+
 // rating: 'useful' | 'not_useful' — matches the DB CHECK constraint.
 export async function persistFeedback(
   ctx: AuthContext,

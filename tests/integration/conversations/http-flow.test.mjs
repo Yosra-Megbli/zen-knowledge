@@ -98,6 +98,14 @@ async function getMessages(jar, conversationId) {
   return { status: res.status, body: await res.json() };
 }
 
+async function deleteConversationHttp(jar, conversationId) {
+  const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}/delete`, {
+    method: "POST",
+    headers: jar ? { Cookie: cookieHeader(jar) } : {},
+  });
+  return { status: res.status, body: await res.json() };
+}
+
 test("unauthenticated request to conversation routes is rejected (401)", async () => {
   const list = await listConversations({});
   assert.equal(list.status, 401);
@@ -140,4 +148,45 @@ test("a nonexistent conversation id also returns 404 for a logged-in user", asyn
   const jar = await login("admin@acmecorp.example", DEMO_PASSWORD);
   const msgs = await getMessages(jar, "00000000-0000-0000-0000-000000000000");
   assert.equal(msgs.status, 404);
+});
+
+test("owner can delete their own conversation, and it disappears from GET", async () => {
+  const ctx = ctxFor("Acme Corp", "admin");
+  const conversationId = await seedConversation(ctx, "guide onboarding entreprise");
+  const jar = await login("admin@acmecorp.example", DEMO_PASSWORD);
+
+  const del = await deleteConversationHttp(jar, conversationId);
+  assert.equal(del.status, 200);
+  assert.equal(del.body.deleted, true);
+
+  const list = await listConversations(jar);
+  assert.ok(!list.body.some((c) => c.id === conversationId), "deleted conversation must not appear in GET /api/conversations");
+
+  const msgs = await getMessages(jar, conversationId);
+  assert.equal(msgs.status, 404, "GET .../messages on a deleted conversation must 404");
+});
+
+test("a same-company colleague cannot delete another user's conversation (404, not 403) — and it survives", async () => {
+  const adminCtx = ctxFor("Acme Corp", "admin");
+  const conversationId = await seedConversation(adminCtx, "guide onboarding entreprise");
+  const contributorJar = await login("contributor@acmecorp.example", DEMO_PASSWORD);
+
+  const del = await deleteConversationHttp(contributorJar, conversationId);
+  assert.equal(del.status, 404, "must be 404 (not found), never 403");
+
+  // Prove it wasn't actually deleted — the owner can still read it.
+  const adminJar = await login("admin@acmecorp.example", DEMO_PASSWORD);
+  const msgs = await getMessages(adminJar, conversationId);
+  assert.equal(msgs.status, 200, "the conversation must survive an unauthorized delete attempt");
+});
+
+test("deleting a nonexistent conversation id returns 404", async () => {
+  const jar = await login("admin@acmecorp.example", DEMO_PASSWORD);
+  const del = await deleteConversationHttp(jar, "00000000-0000-0000-0000-000000000000");
+  assert.equal(del.status, 404);
+});
+
+test("unauthenticated delete request is rejected (401)", async () => {
+  const del = await deleteConversationHttp(null, "00000000-0000-0000-0000-000000000000");
+  assert.equal(del.status, 401);
 });

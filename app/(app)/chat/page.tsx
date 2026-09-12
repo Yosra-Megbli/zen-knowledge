@@ -16,6 +16,7 @@ import {
   MessageSquare,
   History,
   X,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { LogoMark } from "../../components/Logo.tsx";
@@ -47,6 +48,31 @@ interface ConversationSummary {
   id: string;
   title: string | null;
   updated_at: string;
+}
+
+// Local (browser) date/time — this runs client-side ("use client"),
+// so grouping matches the viewer's own calendar day, not UTC.
+function groupConversationsByDate(items: ConversationSummary[]): { label: string; items: ConversationSummary[] }[] {
+  const todayStr = new Date().toDateString();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toDateString();
+
+  const today: ConversationSummary[] = [];
+  const yest: ConversationSummary[] = [];
+  const older: ConversationSummary[] = [];
+  for (const c of items) {
+    const d = new Date(c.updated_at).toDateString();
+    if (d === todayStr) today.push(c);
+    else if (d === yesterdayStr) yest.push(c);
+    else older.push(c);
+  }
+
+  return [
+    { label: "Aujourd'hui", items: today },
+    { label: "Hier", items: yest },
+    { label: "Plus ancien", items: older },
+  ].filter((g) => g.items.length > 0);
 }
 
 // Real questions the seeded demo dataset can actually answer (not
@@ -96,6 +122,7 @@ function ChatPageInner() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,6 +147,18 @@ function ChatPageInner() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchConversations();
   }, [fetchConversations]);
+
+  async function handleDeleteConversation(e: React.MouseEvent, id: string, title: string | null) {
+    e.stopPropagation(); // the row itself also navigates on click
+    if (!window.confirm(`Supprimer la conversation « ${title || "Nouvelle conversation"} » ?`)) return;
+    setDeletingConversationId(id);
+    const res = await fetch(`/api/conversations/${id}/delete`, { method: "POST" });
+    if (res.ok) {
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (id === conversationId) router.push("/chat");
+    }
+    setDeletingConversationId(null);
+  }
 
   // Loads whichever conversation the URL points to (?c=<id>), or
   // resets to the empty "new conversation" state when absent — this
@@ -360,27 +399,48 @@ function ChatPageInner() {
             <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-2 pb-3 space-y-0.5">
+        <div className="flex-1 overflow-y-auto px-2 pb-3">
           {conversations.length === 0 ? (
             <p className="text-xs text-ink-300 px-2 py-2">Aucune conversation.</p>
           ) : (
-            conversations.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => {
-                  router.push(`/chat?c=${c.id}`);
-                  setMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm truncate transition-colors ${
-                  c.id === conversationId
-                    ? "bg-lime-100 text-ink-950 font-medium"
-                    : "text-ink-500 hover:bg-white hover:text-ink-900"
-                }`}
-                title={c.title ?? "Nouvelle conversation"}
-              >
-                <MessageSquare size={14} strokeWidth={2} className="shrink-0" />
-                <span className="truncate">{c.title || "Nouvelle conversation"}</span>
-              </button>
+            groupConversationsByDate(conversations).map((group) => (
+              <div key={group.label} className="mb-2">
+                <p className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-300">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((c) => (
+                    <div
+                      key={c.id}
+                      className={`flex items-center gap-1 rounded-lg pr-1 transition-colors ${
+                        c.id === conversationId ? "bg-lime-100" : "hover:bg-white"
+                      }`}
+                    >
+                      <button
+                        onClick={() => {
+                          router.push(`/chat?c=${c.id}`);
+                          setMobileSidebarOpen(false);
+                        }}
+                        className={`flex-1 min-w-0 flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm truncate transition-colors ${
+                          c.id === conversationId ? "text-ink-950 font-medium" : "text-ink-500 hover:text-ink-900"
+                        }`}
+                        title={c.title ?? "Nouvelle conversation"}
+                      >
+                        <MessageSquare size={14} strokeWidth={2} className="shrink-0" />
+                        <span className="truncate">{c.title || "Nouvelle conversation"}</span>
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteConversation(e, c.id, c.title)}
+                        disabled={deletingConversationId === c.id}
+                        className="shrink-0 p-1.5 rounded-md text-ink-200 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
+                        title="Supprimer la conversation"
+                      >
+                        <Trash2 size={13} strokeWidth={2} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ))
           )}
         </div>
