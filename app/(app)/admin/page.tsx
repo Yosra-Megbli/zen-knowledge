@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CircleDollarSign, ThumbsUp, ShieldAlert, Coins, ChevronDown, CheckCircle2 } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, CheckCircle2 } from "lucide-react";
 
 interface Stats {
   companyName: string | null;
@@ -86,13 +86,18 @@ export default function AdminPage() {
     },
     {
       label: "Feedback",
-      value: `👍 ${feedback.useful} · 👎 ${feedback.not_useful}`,
+      value: (
+        <span className="inline-flex items-center gap-3">
+          <span className="inline-flex items-center gap-1"><ThumbsUp size={16} strokeWidth={2} />{feedback.useful.toLocaleString("fr-FR")}</span>
+          <span className="inline-flex items-center gap-1"><ThumbsDown size={16} strokeWidth={2} />{feedback.not_useful.toLocaleString("fr-FR")}</span>
+        </span>
+      ),
       icon: ThumbsUp,
       sub: feedbackRate !== null ? `${feedbackRate}% positif` : "Aucun retour pour le moment",
     },
     {
       label: "Refus (no-source)",
-      value: refusals.length,
+      value: refusals.length.toLocaleString("fr-FR"),
       icon: ShieldAlert,
       sub: "Sans source — LLM jamais appelé",
     },
