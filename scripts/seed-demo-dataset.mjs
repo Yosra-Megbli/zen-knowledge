@@ -217,7 +217,7 @@ async function run() {
       role: "admin",
       fileName: "A6-securite-incendie-entrepot.txt",
       title: "Procédure de sécurité incendie — Entrepôt central",
-      description: "review_date volontairement ancienne pour tester W3 (obsolescence).",
+      description: "Consignes de sécurité incendie applicables à l'entrepôt central.",
       visibility: "company",
       reviewDate: "2024-01-01",
     });
@@ -227,7 +227,7 @@ async function run() {
       role: "admin",
       fileName: "A7-guide-assistant-zen-knowledge.txt",
       title: "Guide d'utilisation de l'assistant ZEN Knowledge",
-      description: "Contient un test d'injection de prompt intégré au texte source.",
+      description: "Guide pratique pour utiliser l'assistant documentaire interne.",
       visibility: "company",
     });
 
@@ -269,7 +269,7 @@ async function run() {
       role: "admin",
       fileName: "B4-politique-livraison-standard.txt",
       title: "Politique de livraison — délai standard",
-      description: "Document officiel Logistique. Volontairement en contradiction avec la FAQ Service Client (B5).",
+      description: "Politique officielle du service Logistique concernant les délais de livraison.",
       visibility: "company",
     });
 
@@ -278,7 +278,7 @@ async function run() {
       role: "admin",
       fileName: "B5-faq-livraison.txt",
       title: "FAQ Livraison — Service Client",
-      description: "Document Service Client. Volontairement en contradiction avec la politique officielle (B4).",
+      description: "Questions fréquentes du service client au sujet des livraisons.",
       visibility: "company",
     });
 
@@ -293,7 +293,7 @@ async function run() {
         target: {
           kind: "new",
           title: "Brouillon — nouvelle politique de retour",
-          description: "Volontairement laissé non publié pour vérifier 'Upload != Published'.",
+          description: "Version de travail en cours de relecture, non finalisée.",
           visibility: "company",
         },
         triggeredBy: "seed-demo-dataset",
@@ -311,7 +311,7 @@ async function run() {
         role: "admin",
         fileName: "B7-ancien-reglement-interieur-2022.txt",
         title: "Règlement intérieur — Version 2022 (retiré)",
-        description: "Publié puis supprimé pour vérifier que RLS bloque bien les documents supprimés.",
+        description: "Ancien règlement intérieur, remplacé par la version en vigueur.",
         visibility: "company",
       });
       await client.query(`UPDATE documents SET status = 'deleted', deleted_at = now() WHERE id = $1`, [result.documentId]);
