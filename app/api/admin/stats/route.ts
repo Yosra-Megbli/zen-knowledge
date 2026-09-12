@@ -77,19 +77,22 @@ export async function GET(request: Request) {
       `, [ACTIVITY_PAGE_SIZE + 1, offset]),
       // Documents whose review date has passed and are still published —
       // scoped to the caller's company by RLS (no WHERE company_id needed).
-      client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string }>(`
+      // CURRENT_DATE used (not NOW()) because review_date is a date column,
+      // not a timestamp — comparing with NOW() would do an implicit cast.
+      client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string; days_overdue: number }>(`
         SELECT
           d.id,
           v.id AS version_id,
           d.title,
           d.review_date,
-          u.email AS owner_email
+          u.email AS owner_email,
+          (CURRENT_DATE - d.review_date::date)::int AS days_overdue
         FROM documents d
         JOIN document_versions v ON v.document_id = d.id AND v.status = 'published'
         JOIN users u ON u.id = v.uploaded_by
         WHERE d.status = 'published'
           AND d.review_date IS NOT NULL
-          AND d.review_date < NOW()
+          AND d.review_date::date < CURRENT_DATE
         ORDER BY d.review_date ASC
       `),
     ]);

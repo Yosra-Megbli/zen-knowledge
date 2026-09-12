@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, CalendarClock } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
 
 interface ActivityRow {
   action: string;
@@ -12,6 +12,15 @@ interface ActivityRow {
   created_at: string;
 }
 
+interface OverdueDoc {
+  id: string;
+  version_id: string;
+  title: string;
+  review_date: string;
+  owner_email: string;
+  days_overdue: number;
+}
+
 interface Stats {
   companyName: string | null;
   totals: { total: number; answers: number; errors: number; total_tokens: number | null };
@@ -19,7 +28,7 @@ interface Stats {
   feedback: { useful: number; not_useful: number };
   refusals: { question_length: number; created_at: string }[];
   recent: { rows: ActivityRow[]; page: number; hasNextPage: boolean };
-  overdueDocuments: { id: string; version_id: string; title: string; review_date: string; owner_email: string }[];
+  overdueDocuments: OverdueDoc[];
 }
 
 const USD_FORMATTER = new Intl.NumberFormat("fr-FR", {
@@ -62,6 +71,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refusalsOpen, setRefusalsOpen] = useState(true);
+  const [overdueOpen, setOverdueOpen] = useState(true);
   const [activityPage, setActivityPage] = useState(1);
   // Separate from the initial full-page `loading` gate — paging
   // through activity shouldn't blank out the KPI cards that already
@@ -137,8 +147,8 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* KPI Cards — 1 col mobile → 2 sm → 4 lg */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi) => (
           <div key={kpi.label} className="bg-white rounded-2xl border border-ink-100 p-5">
             <div className="flex items-center gap-2 mb-1">
@@ -190,79 +200,70 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* Documents à réviser */}
+      {/* Documents — révision dépassée
+          Pattern identique à la bannière refus : CheckCircle2 si vide,
+          bouton dépliable avec AlertTriangle si ≥ 1 document.           */}
       <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-ink-100 flex items-center gap-2">
-          <CalendarClock size={15} className="text-orange-500" />
-          <h2 className="font-medium text-ink-700">Documents à réviser</h2>
-          {overdueDocuments.length > 0 && (
-            <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200">
-              {overdueDocuments.length}
-            </span>
-          )}
-        </div>
         {overdueDocuments.length === 0 ? (
           <div className="px-5 py-4 flex items-center gap-2 text-sm text-ink-500">
             <CheckCircle2 size={16} className="text-lime-600" />
-            Tous les documents publiés sont à jour.
+            Aucun document dépassant sa date de révision.
           </div>
         ) : (
           <>
-            {/* Mobile cards */}
-            <ul className="sm:hidden divide-y divide-ink-100">
-              {overdueDocuments.map((doc) => (
-                <li key={doc.id} className="px-4 py-3">
-                  <a
-                    href={`/documents/${doc.version_id}/preview`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-sm text-ink-900 hover:text-lime-700 transition-colors"
-                  >
-                    {doc.title}
-                  </a>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-ink-400">
-                    <span className="text-orange-700 font-medium">
-                      {new Date(doc.review_date).toLocaleDateString("fr-FR")} · Dépassée
-                    </span>
-                    <span>{doc.owner_email}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-paper-100 border-b border-ink-100">
-                  <tr>
-                    <th className="text-left px-5 py-3 font-medium text-ink-300">Document</th>
-                    <th className="text-left px-5 py-3 font-medium text-ink-300">Date de révision</th>
-                    <th className="text-left px-5 py-3 font-medium text-ink-300">Propriétaire</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-100">
-                  {overdueDocuments.map((doc) => (
-                    <tr key={doc.id} className="hover:bg-paper-100">
-                      <td className="px-5 py-3">
-                        <a
-                          href={`/documents/${doc.version_id}/preview`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-medium text-ink-900 hover:text-lime-700 transition-colors"
-                        >
-                          {doc.title}
-                        </a>
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200">
-                          {new Date(doc.review_date).toLocaleDateString("fr-FR")} · Dépassée
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
+            <button
+              type="button"
+              onClick={() => setOverdueOpen((v) => !v)}
+              className="w-full px-5 py-4 border-b border-ink-100 flex items-center justify-between text-left"
+            >
+              <h2 className="font-medium text-amber-700 flex items-center gap-2">
+                <AlertTriangle size={15} strokeWidth={2} className="text-amber-500 shrink-0" />
+                {overdueDocuments.length.toLocaleString("fr-FR")} document{overdueDocuments.length > 1 ? "s" : ""} dépassent leur date de révision
+              </h2>
+              <ChevronDown
+                size={14}
+                className={`text-ink-300 transition-transform shrink-0 ${overdueOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+            {overdueOpen && (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[480px] text-sm">
+                  <thead className="bg-paper-100 border-b border-ink-100">
+                    <tr>
+                      <th className="text-left px-5 py-3 font-medium text-ink-300">Titre</th>
+                      <th className="text-left px-5 py-3 font-medium text-ink-300">Propriétaire</th>
+                      <th className="text-left px-5 py-3 font-medium text-ink-300">Date de révision</th>
+                      <th className="text-right px-5 py-3 font-medium text-ink-300">Retard (j.)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-ink-100">
+                    {overdueDocuments.map((doc) => (
+                      <tr key={doc.id} className="hover:bg-paper-100">
+                        <td className="px-5 py-3">
+                          <a
+                            href={`/documents/${doc.version_id}/preview`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-ink-900 hover:text-lime-700 transition-colors"
+                          >
+                            {doc.title}
+                          </a>
+                        </td>
+                        <td className="px-5 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
+                        <td className="px-5 py-3">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                            {new Date(doc.review_date).toLocaleDateString("fr-FR")} · Révision dépassée
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right font-semibold text-amber-700 text-xs">
+                          {doc.days_overdue.toLocaleString("fr-FR")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </div>
