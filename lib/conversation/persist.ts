@@ -61,9 +61,9 @@ export async function persistTurn(
     for (const c of result.citations) {
       await client.query(
         `INSERT INTO citations
-           (message_id, company_id, document_version_id, chunk_id, snippet_text)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [messageId, ctx.companyId, c.documentVersionId, c.chunkId, c.snippetText]
+           (message_id, company_id, document_version_id, chunk_id, snippet_text, source_index)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [messageId, ctx.companyId, c.documentVersionId, c.chunkId, c.snippetText, c.sourceIndex]
       );
     }
 

@@ -51,6 +51,7 @@ export async function GET(
       chunk_id: string | null;
       page_number: number | null;
       snippet_text: string;
+      source_index: number | null;
       document_title: string;
       version_number: number;
       version_status: string;
@@ -62,6 +63,7 @@ export async function GET(
          cit.chunk_id,
          cit.page_number,
          cit.snippet_text,
+         cit.source_index,
          d.title AS document_title,
          v.version_number,
          v.status AS version_status,
@@ -98,13 +100,14 @@ export async function GET(
     content: m.content,
     latencyMs: m.latency_ms,
     feedback: feedbackByMessage.get(m.id) ?? null,
-    // sourceIndex is a best-effort reconstruction (citations table has
-    // no stored [SOURCE n] number — see route comment above) — chunk
-    // insertion order approximates the model's original numbering
-    // closely enough for display, but isn't guaranteed to match
-    // [SOURCE n] markers still literally present in `content` 1:1.
+    // source_index is the real [SOURCE n] number persisted at answer
+    // time (db/migrations/0014). Rows written before that column was
+    // populated fall back to insertion order (chunk_id creation order
+    // in persistTurn matches extractCitations()'s discovery order) so
+    // old conversations still render sensibly, just without the exact
+    // 1:1 guarantee new rows have.
     citations: (citationsByMessage.get(m.id) ?? []).map((c, i) => ({
-      sourceIndex: i + 1,
+      sourceIndex: c.source_index ?? i + 1,
       chunkId: c.chunk_id,
       documentVersionId: c.document_version_id,
       documentTitle: c.document_title,
