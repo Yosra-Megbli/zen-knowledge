@@ -53,6 +53,11 @@ export async function persistTurn(
     );
     const messageId = msgRes.rows[0].id;
 
+    // So a conversation resumed after new activity sorts to the top of
+    // GET /api/conversations (ORDER BY updated_at DESC) instead of
+    // staying pinned at its original creation time forever.
+    await client.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [conversationId]);
+
     for (const c of result.citations) {
       await client.query(
         `INSERT INTO citations

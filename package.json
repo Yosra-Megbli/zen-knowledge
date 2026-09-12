@@ -19,6 +19,7 @@
     "test:rag": "node --env-file-if-exists=.env.local --test tests/integration/rag/*.test.ts",
     "test:rag5": "node --env-file-if-exists=.env.local --test tests/unit/rag/*.test.ts tests/integration/rag/answer.test.ts",
     "test:auth-http": "node --test tests/integration/auth/http-flow.test.mjs",
+    "test:conversations-http": "node --test tests/integration/conversations/http-flow.test.mjs",
     "test:ingestion": "node --env-file-if-exists=.env.local --test tests/unit/ingestion/*.test.ts tests/integration/ingestion/pipeline.test.ts tests/integration/ingestion/w3.test.ts",
     "test:phase3": "npm run test:rls && npm run test:embeddings && npm run test:auth && npm run test:rag",
     "test:phase5": "npm run test:rls && npm run test:ingestion && npm run test:rag5"
