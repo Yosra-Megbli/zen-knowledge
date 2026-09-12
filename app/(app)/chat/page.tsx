@@ -51,11 +51,24 @@ interface ConversationSummary {
 // placeholder copy) — clicking one shows the full RAG flow (question
 // -> answer -> citation -> source document) in one click instead of
 // requiring a blank page and a typed question.
-const SUGGESTIONS: { icon: LucideIcon; label: string; question: string }[] = [
+//
+// "Confidentialité" targets a restricted-visibility document
+// (admin-only in the demo dataset) — restrictedToAdmin filters it out
+// for any other role, via the exact same rule
+// lib/permissions/documentVisibility.ts's canAccessDocumentVisibility
+// applies server-side (visibility === "restricted" -> role === "admin").
+// Clicking it as a non-admin was never a real access-control gap —
+// retrieveAuthorizedChunks()/RLS would already refuse the question
+// like any manually-typed one — this is purely about not surfacing a
+// suggestion that predictably dead-ends for that viewer. The other
+// three suggestions are company- or department-visible; department
+// scoping isn't applied here since a generic topical suggestion isn't
+// tied to one specific document/department the way this one is.
+const SUGGESTIONS: { icon: LucideIcon; label: string; question: string; restrictedToAdmin?: boolean }[] = [
   { icon: Package, label: "Politique produit", question: "Quel est le délai de retour produit ?" },
   { icon: Users, label: "RH", question: "Quelle est la procédure d'intégration des nouveaux employés ?" },
   { icon: Truck, label: "Logistique", question: "Quelle est la politique de livraison ?" },
-  { icon: Lock, label: "Confidentialité", question: "Quelle est la grille salariale et les primes pour 2026 ?" },
+  { icon: Lock, label: "Confidentialité", question: "Quelle est la grille salariale et les primes pour 2026 ?", restrictedToAdmin: true },
 ];
 
 export default function ChatPage() {
@@ -79,7 +92,17 @@ function ChatPageInner() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((s) => setIsAdmin(s?.user?.role === "admin"))
+      .catch(() => {});
+  }, []);
+
+  const visibleSuggestions = SUGGESTIONS.filter((s) => !s.restrictedToAdmin || isAdmin);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -352,7 +375,7 @@ function ChatPageInner() {
               Interrogez les documents autorisés de votre entreprise.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left mb-8">
-              {SUGGESTIONS.map((s) => (
+              {visibleSuggestions.map((s) => (
                 <button
                   key={s.question}
                   onClick={(e) => send(e, s.question)}

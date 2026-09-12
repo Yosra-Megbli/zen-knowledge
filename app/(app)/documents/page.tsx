@@ -269,8 +269,26 @@ export default function DocumentsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
-                  <td className="px-4 py-3 text-ink-500 text-xs">
-                    {doc.review_date ? new Date(doc.review_date).toLocaleDateString("fr-FR") : "—"}
+                  <td className="px-4 py-3 text-xs">
+                    {doc.review_date ? (
+                      <span
+                        className={
+                          doc.status === "published" && new Date(doc.review_date) < new Date()
+                            ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
+                            : "text-ink-500"
+                        }
+                        title={
+                          doc.status === "published" && new Date(doc.review_date) < new Date()
+                            ? "Date de révision dépassée — voir W3 (obsolescence)"
+                            : undefined
+                        }
+                      >
+                        {new Date(doc.review_date).toLocaleDateString("fr-FR")}
+                        {doc.status === "published" && new Date(doc.review_date) < new Date() && " · Révision dépassée"}
+                      </span>
+                    ) : (
+                      <span className="text-ink-500">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">

@@ -52,15 +52,19 @@ Fonctionnalité complète de bout en bout :
 - Embeddings locaux (aucun appel API externe), recherche vectorielle autorisée par RLS
 - Pipeline d'ingestion complet (upload → extraction → nettoyage → chunking → embedding → publication explicite)
 - Génération de réponse RAG via Groq, citations vérifiables, refus "aucune source" avant tout appel LLM
-- UI : login, chat, gestion documentaire, administration
+- UI : login, chat (historique de conversation repris entre sessions,
+  sidebar), gestion documentaire (aperçu avec surlignage de la citation,
+  suppression), administration (coût estimé, taux de feedback)
+- Suppression de document (soft-delete), propagée automatiquement aux
+  chunks par trigger — citations historiques toujours vérifiables
 - Workflows n8n : **W1** (ingestion) et **W3** (obsolescence — scan, notification, dépublication automatique)
 - Déploiement Vercel + Supabase Free fonctionnel
 - Dataset de démonstration réaliste (14 documents, 2 entreprises) — voir [`dataset/README.md`](dataset/README.md)
+- CI GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) — lint, build, migrations, la suite de tests complète (voir "CI" plus bas) sur chaque push/PR
 
 Non couvert par ce dépôt : workflow n8n **W2** (implémenté directement
 comme routes Next.js `/api/rag/*` plutôt qu'en n8n séparé — voir
-"Pourquoi W2 n'est pas un workflow n8n" plus bas), vidéo de
-démonstration.
+"Pourquoi W2 n'est pas un workflow n8n" plus bas).
 
 ## Stack (0€)
 
@@ -343,16 +347,21 @@ npm run db:seed-demo
   (`0.83`, voir `.env.example`) — le fallback code (`0.3`) est
   délibérément conservateur mais insuffisant en pratique pour ce
   modèle d'embedding.
-- Pas de vidéo de démonstration (hors du périmètre d'un assistant
-  automatisé).
 - Pas de test automatisé de bout en bout contre un vrai
-  `GROQ_API_KEY` en environnement CI (les tests RAG utilisent un
+  `GROQ_API_KEY`, y compris en CI (les tests RAG utilisent un
   fournisseur LLM mocké, injecté via `setLlmProvider()` — le contrat
   d'appel HTTP/parsing de réponse Groq lui-même n'est vérifié que
   manuellement).
 - Le mot de passe superutilisateur Supabase (`SUPABASE_DIRECT_URL`)
   doit être tourné périodiquement dans le tableau de bord Supabase —
   action manuelle, hors du périmètre du code.
+- `hnsw.iterative_scan` (voir `lib/rag/retrieveAuthorizedChunks.ts`)
+  est activé, mais son effet n'est pas observable sur le dataset de
+  démo : à 274 chunks, le planificateur PostgreSQL choisit un scan+tri
+  classique plutôt que l'index HNSW (comportement correct et attendu
+  à cette échelle — vérifié par `EXPLAIN ANALYZE`, voir le commit).
+  Le bénéfice réel n'apparaît qu'à partir d'un corpus nettement plus
+  grand.
 
 ## Licence / confidentialité
 
