@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Trash2 } from "lucide-react";
 
 interface Document {
   id: string;
@@ -53,6 +53,7 @@ export default function DocumentsPage() {
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ versionId: string; title: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -153,9 +154,13 @@ export default function DocumentsPage() {
   }
 
   async function handleDelete(versionId: string, title: string) {
-    if (!window.confirm(`Supprimer « ${title} » ? Le document ne sera plus accessible dans le chat ni la bibliothèque.`)) {
-      return;
-    }
+    setConfirmDelete({ versionId, title });
+  }
+
+  async function confirmAndDelete() {
+    if (!confirmDelete) return;
+    const { versionId } = confirmDelete;
+    setConfirmDelete(null);
     setDeletingId(versionId);
     setError(null);
     const res = await fetch(`/api/documents/${versionId}/delete`, { method: "POST" });
@@ -453,6 +458,42 @@ export default function DocumentsPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                <Trash2 size={20} className="text-red-600" strokeWidth={2} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-ink-950 text-base mb-1">Supprimer ce document ?</h2>
+                <p className="text-sm text-ink-500">
+                  <span className="font-medium text-ink-900">« {confirmDelete.title} »</span> ne sera plus
+                  accessible dans le chat ni la bibliothèque. Cette action est irréversible.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmAndDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Upload Modal */}
