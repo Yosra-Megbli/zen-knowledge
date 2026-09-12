@@ -3,10 +3,19 @@ import { getAuthContext } from "../../../../lib/permissions/authContext.ts";
 import { withAuthContext } from "../../../../lib/db/withAuthContext.ts";
 import { estimateCostUsd } from "../../../../lib/rag/pricing.ts";
 
-export async function GET() {
+const ACTIVITY_PAGE_SIZE = 15;
+
+export async function GET(request: Request) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (ctx.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+
+  // Only the activity table is paginated — every KPI aggregate below
+  // (totals, cost, feedback, refusals) still runs over the full,
+  // unpaginated dataset.
+  const pageParam = Number(new URL(request.url).searchParams.get("page"));
+  const page = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
+  const offset = (page - 1) * ACTIVITY_PAGE_SIZE;
 
   const data = await withAuthContext(ctx, async (client) => {
     const [company, totals, costRows, feedbackRows, refusals, recent] = await Promise.all([
@@ -64,8 +73,8 @@ export async function GET() {
         LEFT JOIN documents d ON d.id = dc.document_id
         WHERE al.action IN ('rag_answer','rag_refusal','rag_error')
         ORDER BY al.created_at DESC
-        LIMIT 50
-      `),
+        LIMIT $1 OFFSET $2
+      `, [ACTIVITY_PAGE_SIZE + 1, offset]),
     ]);
 
     const estimatedCostUsd = costRows.rows.reduce(
@@ -76,13 +85,16 @@ export async function GET() {
     const feedbackByRating = { useful: 0, not_useful: 0 };
     for (const r of feedbackRows.rows) feedbackByRating[r.rating] = r.count;
 
+    const hasNextPage = recent.rows.length > ACTIVITY_PAGE_SIZE;
+    const recentRows = hasNextPage ? recent.rows.slice(0, ACTIVITY_PAGE_SIZE) : recent.rows;
+
     return {
       companyName: company.rows[0]?.name ?? null,
       totals: totals.rows[0],
       estimatedCostUsd,
       feedback: feedbackByRating,
       refusals: refusals.rows,
-      recent: recent.rows,
+      recent: { rows: recentRows, page, hasNextPage },
     };
   });
 

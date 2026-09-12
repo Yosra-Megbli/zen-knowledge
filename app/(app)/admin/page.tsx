@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, CheckCircle2 } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2 } from "lucide-react";
+
+interface ActivityRow {
+  action: string;
+  model: string | null;
+  latency_ms: number | null;
+  source_count: number;
+  main_document_title: string | null;
+  created_at: string;
+}
 
 interface Stats {
   companyName: string | null;
@@ -9,14 +18,7 @@ interface Stats {
   estimatedCostUsd: number;
   feedback: { useful: number; not_useful: number };
   refusals: { question_length: number; created_at: string }[];
-  recent: {
-    action: string;
-    model: string | null;
-    latency_ms: number | null;
-    source_count: number;
-    main_document_title: string | null;
-    created_at: string;
-  }[];
+  recent: { rows: ActivityRow[]; page: number; hasNextPage: boolean };
 }
 
 const USD_FORMATTER = new Intl.NumberFormat("fr-FR", {
@@ -59,14 +61,28 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refusalsOpen, setRefusalsOpen] = useState(true);
+  const [activityPage, setActivityPage] = useState(1);
+  // Separate from the initial full-page `loading` gate — paging
+  // through activity shouldn't blank out the KPI cards that already
+  // loaded, just show a brief disabled state on the table itself.
+  const [activityLoading, setActivityLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/stats")
+    const isFirstLoad = activityPage === 1 && !stats;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (isFirstLoad) setLoading(true);
+    else setActivityLoading(true);
+
+    fetch(`/api/admin/stats?page=${activityPage}`)
       .then((r) => r.ok ? r.json() : r.json().then((d: { error: string }) => Promise.reject(d.error)))
       .then(setStats)
       .catch((e: string) => setError(typeof e === "string" ? e : "Erreur"))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        setLoading(false);
+        setActivityLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activityPage]);
 
   if (loading) return <div className="text-center text-ink-300 py-20">Chargement…</div>;
   if (error) return <div className="text-center text-red-500 py-20">{error}</div>;
@@ -174,7 +190,7 @@ export default function AdminPage() {
       </div>
 
       {/* Activité récente */}
-      <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+      <div className={`bg-white rounded-2xl border border-ink-100 overflow-hidden ${activityLoading ? "opacity-60" : ""}`}>
         <div className="px-5 py-4 border-b border-ink-100">
           <h2 className="font-medium text-ink-700">Activité récente</h2>
         </div>
@@ -189,7 +205,7 @@ export default function AdminPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
-            {recent.map((r, i) => {
+            {recent.rows.map((r, i) => {
               const a = ACTION_LABELS[r.action] ?? { label: r.action, color: "bg-ink-100 text-ink-500" };
               return (
                 <tr key={i} className="hover:bg-paper-100">
@@ -216,6 +232,25 @@ export default function AdminPage() {
             })}
           </tbody>
         </table>
+        <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between">
+          <button
+            onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+            disabled={recent.page <= 1 || activityLoading}
+            className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 disabled:opacity-30 disabled:hover:text-ink-500 transition-colors"
+          >
+            <ChevronLeft size={14} strokeWidth={2} />
+            Précédent
+          </button>
+          <span className="text-xs text-ink-300">Page {recent.page}</span>
+          <button
+            onClick={() => setActivityPage((p) => p + 1)}
+            disabled={!recent.hasNextPage || activityLoading}
+            className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 disabled:opacity-30 disabled:hover:text-ink-500 transition-colors"
+          >
+            Suivant
+            <ChevronRight size={14} strokeWidth={2} />
+          </button>
+        </div>
       </div>
     </div>
   );
