@@ -66,3 +66,6 @@ Desktop.ini
 # Divers
 *.tsbuildinfo
 coverage/
+
+.vercel
+.env*
