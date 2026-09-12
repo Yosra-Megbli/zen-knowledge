@@ -110,7 +110,7 @@ export default async function DocumentPreviewPage({
   ];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
       <Link
         href="/documents"
         className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-lime-700 transition-colors mb-6"
@@ -122,7 +122,7 @@ export default async function DocumentPreviewPage({
       <div className="bg-white rounded-2xl border border-ink-100 p-6 mb-6">
         <h1 className="font-display text-2xl font-bold text-ink-950 tracking-tight mb-1">{row.title}</h1>
         {row.description && <p className="text-sm text-ink-500 mb-4">{row.description}</p>}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 mt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 mt-4">
           {metaItems.map((m) => (
             <div key={m.label}>
               <p className="text-[11px] font-medium uppercase tracking-wide text-ink-300">{m.label}</p>

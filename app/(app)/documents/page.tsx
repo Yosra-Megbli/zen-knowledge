@@ -168,7 +168,7 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="font-display text-2xl sm:text-3xl font-bold text-ink-950 tracking-tight">Bibliothèque de documents</h1>
         <button
@@ -180,18 +180,20 @@ export default function DocumentsPage() {
       </div>
 
       {!loading && docs.length > 0 && (
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 mb-4">
+        <div className="flex flex-col gap-2 mb-4">
+          {/* Search — full width on mobile */}
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher un document…"
-            className="w-full sm:flex-1 sm:min-w-[200px] border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
+            className="w-full border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
           />
-          <div className="flex gap-2">
+          {/* Filters row + counter */}
+          <div className="flex items-center gap-2">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="flex-1 sm:flex-none border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
+              className="flex-1 border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
             >
               <option value="all">Tous les statuts</option>
               {statusOptions.map((s) => (
@@ -201,17 +203,17 @@ export default function DocumentsPage() {
             <select
               value={visibilityFilter}
               onChange={(e) => setVisibilityFilter(e.target.value)}
-              className="flex-1 sm:flex-none border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
+              className="flex-1 border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
             >
               <option value="all">Toutes visibilités</option>
               {Object.entries(VISIBILITY_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
+            <span className="text-xs text-ink-300 whitespace-nowrap shrink-0">
+              {filteredDocs.length} doc{filteredDocs.length !== 1 ? "s" : ""}
+            </span>
           </div>
-          <span className="text-xs text-ink-300 whitespace-nowrap self-center">
-            {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""}
-          </span>
         </div>
       )}
 
@@ -223,8 +225,8 @@ export default function DocumentsPage() {
         <div className="text-center text-ink-300 py-20">Aucun document ne correspond à ces critères.</div>
       ) : (
         <>
-          {/* ── Mobile cards (< sm) ─────────────────────────────── */}
-          <div className="sm:hidden flex flex-col gap-3">
+          {/* ── Mobile cards (< md) ──────────────────────────────────────── */}
+          <div className="md:hidden flex flex-col gap-3">
             {filteredDocs.map((doc) => {
               const status = doc.latest_status ?? doc.status;
               const isOverdue =
@@ -328,8 +330,8 @@ export default function DocumentsPage() {
             })}
           </div>
 
-          {/* ── Desktop table (sm+) ──────────────────────────────── */}
-          <div className="hidden sm:block bg-white rounded-2xl border border-ink-100 overflow-hidden">
+          {/* ── Desktop table (md+) ────────────────────────────────────── */}
+          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-paper-100 border-b border-ink-100">
@@ -455,7 +457,7 @@ export default function DocumentsPage() {
 
       {/* Upload Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h2 className="text-lg font-semibold mb-4">Nouveau document</h2>
             <form onSubmit={handleUpload} className="flex flex-col gap-4">

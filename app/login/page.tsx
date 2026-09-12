@@ -41,8 +41,8 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper-50">
-      <div className="w-full max-w-sm px-4">
+    <div className="min-h-screen flex items-center justify-center bg-paper-50 px-4 py-8">
+      <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <span className="inline-flex mb-4">
             <LogoMark className="w-11 h-11" />
@@ -103,7 +103,7 @@ export default function LoginPage() {
               >
                 <span>
                   <span className="block font-semibold text-ink-950">{q.label}</span>
-                  <span className="text-ink-300">{q.email}</span>
+                  <span className="text-ink-300 truncate text-xs">{q.email}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-lime-100 text-lime-700 font-medium">
                   {q.role}
