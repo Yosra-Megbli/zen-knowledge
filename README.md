@@ -279,7 +279,7 @@ cron) et dégraderait l'expérience de chat interactif.
 ```
 npm run test:rls          # 13 — isolation RLS, connexion directe app_role
 npm run test:embeddings   # 6  — embeddings locaux
-npm run test:auth         # 11 — callbacks Auth.js
+npm run test:auth         # 19 — callbacks Auth.js (11) + règles de visibilité documentVisibility.ts (8)
 npm run test:rag          # 34 — retrieval + génération RAG (sécurité + comportement)
 npm run test:ingestion    # 45 — pipeline d'ingestion + suppression de document + W3 (inclut unpublishDocument, resolve function, upsert review_tasks)
 npm run test:auth-http    # 5  — HTTP live (nécessite un serveur démarré)
