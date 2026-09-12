@@ -69,6 +69,30 @@ export async function retrieveAuthorizedChunks(
   const vectorLiteral = `[${queryEmbedding.join(",")}]`;
 
   const rows = await withAuthContext(ctx, async (client) => {
+    // HNSW's iterative scan is OFF by default in pgvector 0.8.6
+    // (verified: `SHOW hnsw.iterative_scan` -> 'off' on this exact
+    // image — db/migrations/0007's index). Without it, the planner
+    // walks the HNSW graph for candidates, applies the WHERE filter
+    // (RLS's document_chunks_select policy — company/publication/
+    // visibility) AFTER, and stops once it's walked enough of the
+    // graph to satisfy LIMIT $2 on the UNFILTERED candidate set — so
+    // a company/department with few chunks relative to the total
+    // corpus can silently get fewer than k rows back, or even zero,
+    // purely because the nearest graph neighbors it found first all
+    // belonged to other companies and got discarded by RLS. Turning
+    // this on makes the scan keep walking until it actually has k
+    // rows that survive the filter. 'relaxed_order' (not
+    // 'strict_order'): allows slightly-out-of-order results in
+    // exchange for not re-walking the graph from scratch on every
+    // filter miss — acceptable here since this is a top-k relevance
+    // ranking, not a use case requiring an exact distance ordering
+    // guarantee. SET LOCAL scopes this to the current transaction
+    // only (matches how withAuthContext already scopes app.company_id
+    // etc. via set_config(..., true) — see that function's own
+    // comment), so it can never leak onto another pooled connection's
+    // next request.
+    await client.query("SET LOCAL hnsw.iterative_scan = relaxed_order");
+
     const res = await client.query<Row>(
       `SELECT
          dc.id AS chunk_id,
