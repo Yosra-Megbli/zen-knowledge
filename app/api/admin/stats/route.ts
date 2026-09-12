@@ -8,7 +8,8 @@ export async function GET() {
   if (ctx.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const data = await withAuthContext(ctx, async (client) => {
-    const [totals, refusals, recent] = await Promise.all([
+    const [company, totals, refusals, recent] = await Promise.all([
+      client.query<{ name: string }>(`SELECT name FROM companies WHERE id = $1`, [ctx.companyId]),
       client.query<{ total: number; answers: number; errors: number; total_tokens: number | null }>(`
         SELECT
           COUNT(*)::int AS total,
@@ -41,6 +42,7 @@ export async function GET() {
       `),
     ]);
     return {
+      companyName: company.rows[0]?.name ?? null,
       totals: totals.rows[0],
       refusals: refusals.rows,
       recent: recent.rows,
