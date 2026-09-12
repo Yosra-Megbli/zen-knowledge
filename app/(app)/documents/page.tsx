@@ -15,6 +15,7 @@ interface Document {
   latest_version: number | null;
   latest_version_id: string | null;
   latest_status: string | null;
+  latest_error_message: string | null;
   review_date: string | null;
   created_at: string;
 }
@@ -49,6 +50,7 @@ export default function DocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -137,6 +139,18 @@ export default function DocumentsPage() {
     setPublishingId(null);
   }
 
+  async function handleRetry(versionId: string) {
+    setRetryingId(versionId);
+    setError(null);
+    const res = await fetch(`/api/documents/${versionId}/retry`, { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}) as { error?: string });
+      setError(data.error ?? "Erreur lors de la réindexation.");
+    }
+    fetchDocs();
+    setRetryingId(null);
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-6">
@@ -212,6 +226,11 @@ export default function DocumentsPage() {
                     {doc.description && (
                       <p className="text-xs text-ink-300 truncate max-w-xs">{doc.description}</p>
                     )}
+                    {doc.latest_status === "failed" && doc.latest_error_message && (
+                      <p className="text-xs text-red-500 truncate max-w-xs" title={doc.latest_error_message}>
+                        {doc.latest_error_message}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {VISIBILITY_COLORS[doc.visibility] ? (
@@ -247,8 +266,15 @@ export default function DocumentsPage() {
                       >
                         {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
                       </button>
-                    ) : doc.latest_status === "failed" ? (
-                      <span className="text-xs text-red-500">Échec du traitement</span>
+                    ) : doc.latest_status === "failed" && doc.latest_version_id ? (
+                      <button
+                        onClick={() => handleRetry(doc.latest_version_id!)}
+                        disabled={retryingId === doc.latest_version_id}
+                        className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+                        title="Relance l'extraction/l'indexation à partir du même fichier"
+                      >
+                        {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
+                      </button>
                     ) : doc.latest_version_id ? (
                       <a
                         href={`/api/documents/${doc.latest_version_id}/file`}
