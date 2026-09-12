@@ -54,6 +54,7 @@ export async function GET(
       document_title: string;
       version_number: number;
       version_status: string;
+      document_status: string;
     }>(
       `SELECT
          cit.message_id,
@@ -63,7 +64,8 @@ export async function GET(
          cit.snippet_text,
          d.title AS document_title,
          v.version_number,
-         v.status AS version_status
+         v.status AS version_status,
+         d.status AS document_status
        FROM citations cit
        JOIN document_versions v ON v.id = cit.document_version_id
        JOIN documents d ON d.id = v.document_id
@@ -108,6 +110,7 @@ export async function GET(
       documentTitle: c.document_title,
       versionNumber: c.version_number,
       versionStatus: c.version_status,
+      documentStatus: c.document_status,
       pageNumber: c.page_number,
       snippetText: c.snippet_text,
     })),

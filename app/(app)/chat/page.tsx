@@ -25,6 +25,7 @@ interface Citation {
   documentTitle: string;
   versionNumber: number;
   versionStatus?: string;
+  documentStatus?: string;
   pageNumber: number | null;
   snippetText: string;
   sourceIndex: number;
@@ -231,6 +232,17 @@ function ChatPageInner() {
   // below the bubble — opening the exact document version at the
   // cited page, per "chaque citation ouvre le bon document au passage
   // utilisé".
+  // The citation's primary destination: the in-app preview page,
+  // opened at the cited passage (chunkId highlights it there; the
+  // snippet is also passed so the highlight still works even if the
+  // chunk row was later deleted — see the preview page's fallback).
+  function previewUrl(citation: Citation) {
+    const params = new URLSearchParams();
+    if (citation.chunkId) params.set("chunk", citation.chunkId);
+    else params.set("snippet", citation.snippetText);
+    return `/documents/${citation.documentVersionId}/preview?${params.toString()}`;
+  }
+
   function renderAnswer(content: string, citations: Citation[]) {
     const normalized = content
       .replace(/[​-‍﻿]/g, "")
@@ -251,11 +263,10 @@ function ChatPageInner() {
       // didn't keep (fabricated / out of range) renders as plain text,
       // never as a button pointing nowhere.
       if (!citation) return <Fragment key={i}>{part}</Fragment>;
-      const fileUrl = `/api/documents/${citation.documentVersionId}/file${citation.pageNumber ? `#page=${citation.pageNumber}` : ""}`;
       return (
         <a
           key={i}
-          href={fileUrl}
+          href={previewUrl(citation)}
           target="_blank"
           rel="noopener noreferrer"
           title={`${citation.documentTitle} — v${citation.versionNumber}${citation.pageNumber ? `, page ${citation.pageNumber}` : ""}`}
@@ -397,8 +408,11 @@ function ChatPageInner() {
                       <p className="text-xs text-ink-300 font-medium px-1">Sources</p>
                       {msg.citations.map((c) => {
                         const key = `${i}-${c.sourceIndex}`;
-                        const fileUrl = `/api/documents/${c.documentVersionId}/file`;
-                        const isUnavailable = c.versionStatus === "deleted" || c.versionStatus === "archived";
+                        // Only a deleted DOCUMENT blocks access — an
+                        // "archived" version (superseded by a newer
+                        // one) stays fully viewable, historical
+                        // citations must remain verifiable.
+                        const isDeleted = c.documentStatus === "deleted";
                         return (
                           <div key={key} className="bg-white border border-ink-100 rounded-xl text-xs">
                             <div className="flex items-center justify-between gap-2 px-3 py-2">
@@ -407,7 +421,7 @@ function ChatPageInner() {
                                 className="flex-1 text-left font-medium text-ink-700 truncate hover:text-lime-600 transition-colors"
                               >
                                 [{c.sourceIndex}] {c.documentTitle}
-                                {c.versionStatus === "deleted" && (
+                                {isDeleted && (
                                   <span className="ml-1.5 text-ink-300 font-normal">(document supprimé)</span>
                                 )}
                               </button>
@@ -415,9 +429,9 @@ function ChatPageInner() {
                                 <span className="text-ink-300">
                                   v{c.versionNumber}{c.pageNumber ? ` · p.${c.pageNumber}` : ""}
                                 </span>
-                                {!isUnavailable && (
+                                {!isDeleted && (
                                   <a
-                                    href={fileUrl}
+                                    href={previewUrl(c)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-lime-600 hover:text-lime-800 transition-colors"
