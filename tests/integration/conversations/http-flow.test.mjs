@@ -10,11 +10,42 @@
 // routes themselves — this test is what actually verifies that
 // narrower guarantee holds, not just company isolation (already
 // covered elsewhere).
+//
+// Conversations are seeded directly via ensureConversation/persistTurn
+// (lib/conversation/persist.ts) rather than through a real
+// POST /api/rag/answer call: that route calls the real Groq provider
+// when hit over HTTP (setLlmProvider()'s in-process mock, used by
+// every other RAG test, cannot reach a separately-running server
+// process), and this suite has nothing to do with LLM availability —
+// only with who is allowed to read a conversation back. Matches the
+// project's own documented stance (README "Limitations connues"): no
+// test here depends on a real GROQ_API_KEY.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { ensureConversation, persistTurn } from "../../../lib/conversation/persist.ts";
+import { fixtures } from "../rls/helpers.mjs";
 
 const BASE_URL = process.env.CONVERSATIONS_TEST_BASE_URL ?? "http://localhost:3100";
 const DEMO_PASSWORD = "ZenDemo2026!";
+
+const f = await fixtures();
+
+function ctxFor(company, role) {
+  const user = f.users[`${company}:${role}`];
+  return { userId: user.id, companyId: f.companies[company], role, departmentId: user.department_id };
+}
+
+async function seedConversation(ctx, question) {
+  const conversationId = await ensureConversation(ctx, null, question);
+  const fakeResult = {
+    answer: "Seeded test answer — no real LLM call was made.",
+    citations: [],
+    refusal: false,
+    metadata: { model: "test-seed", latencyMs: 1, promptTokens: null, completionTokens: null, totalTokens: null, sourceCount: 0 },
+  };
+  await persistTurn(ctx, conversationId, question, fakeResult);
+  return conversationId;
+}
 
 function parseCookies(res) {
   const jar = {};
@@ -55,15 +86,6 @@ async function login(email, password) {
   return jar;
 }
 
-async function askQuestion(jar, question) {
-  const res = await fetch(`${BASE_URL}/api/rag/answer`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: cookieHeader(jar) },
-    body: JSON.stringify({ question, conversationId: null }),
-  });
-  return res.json();
-}
-
 async function listConversations(jar) {
   const res = await fetch(`${BASE_URL}/api/conversations`, { headers: { Cookie: cookieHeader(jar) } });
   return { status: res.status, body: await res.json() };
@@ -84,34 +106,33 @@ test("unauthenticated request to conversation routes is rejected (401)", async (
 });
 
 test("owner can list and read their own conversation", async () => {
-  const jar = await login("admin@acmecorp.example", DEMO_PASSWORD);
-  const answer = await askQuestion(jar, "guide onboarding entreprise");
-  assert.ok(answer.conversationId, "expected a conversation to be created");
+  const ctx = ctxFor("Acme Corp", "admin");
+  const conversationId = await seedConversation(ctx, "guide onboarding entreprise");
 
+  const jar = await login("admin@acmecorp.example", DEMO_PASSWORD);
   const list = await listConversations(jar);
   assert.equal(list.status, 200);
-  assert.ok(list.body.some((c) => c.id === answer.conversationId));
+  assert.ok(list.body.some((c) => c.id === conversationId));
 
-  const msgs = await getMessages(jar, answer.conversationId);
+  const msgs = await getMessages(jar, conversationId);
   assert.equal(msgs.status, 200);
   assert.ok(msgs.body.messages.length >= 1);
 });
 
 test("a same-company colleague cannot list or read another user's conversation (404, not 403)", async () => {
-  const adminJar = await login("admin@acmecorp.example", DEMO_PASSWORD);
-  const contributorJar = await login("contributor@acmecorp.example", DEMO_PASSWORD);
+  const adminCtx = ctxFor("Acme Corp", "admin");
+  const conversationId = await seedConversation(adminCtx, "guide onboarding entreprise");
 
-  const answer = await askQuestion(adminJar, "guide onboarding entreprise");
-  assert.ok(answer.conversationId);
+  const contributorJar = await login("contributor@acmecorp.example", DEMO_PASSWORD);
 
   const list = await listConversations(contributorJar);
   assert.equal(list.status, 200);
   assert.ok(
-    !list.body.some((c) => c.id === answer.conversationId),
+    !list.body.some((c) => c.id === conversationId),
     "another user's conversation must never appear in someone else's list, even same company"
   );
 
-  const msgs = await getMessages(contributorJar, answer.conversationId);
+  const msgs = await getMessages(contributorJar, conversationId);
   assert.equal(msgs.status, 404, "must be 404 (not found), never 403 (which would confirm it exists)");
 });
 

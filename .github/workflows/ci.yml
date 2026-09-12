@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Same image/version as docker/docker-compose.yml's postgres
+    # service — pgvector 0.8.6 on Postgres 16.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zen_knowledge_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d zen_knowledge_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # --- Postgres: migration_role (the service container's own
+      # superuser) ---
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: zen_knowledge_ci
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # --- app_role password ---
+      # This, and AUTH_SECRET below, are throwaway values that exist
+      # only for the lifetime of this job: they authenticate a Postgres
+      # role in a service container nothing outside this runner can
+      # reach, and sign JWTs for a Next.js server that's killed at the
+      # end of the job. Neither protects anything of real value, so
+      # they're inline here rather than GitHub Secrets — reserving
+      # secrets.* for values that WOULD matter if leaked (see
+      # GROQ_API_KEY below).
+      APP_ROLE_PASSWORD: ci_only_throwaway_app_role_password
+      AUTH_SECRET: ci_only_throwaway_auth_secret_not_used_anywhere_real
+      AUTH_URL: http://localhost:3100
+      AUTH_TRUST_HOST: "true"
+      # --- Embeddings (local, no external API) ---
+      EMBEDDING_MODEL: Xenova/multilingual-e5-small
+      EMBEDDING_DIMENSION: "384"
+      RAG_MIN_SIMILARITY: "0.83"
+      # --- Groq ---
+      # Genuinely optional for this test suite: every RAG test injects
+      # a mock LLM provider (setLlmProvider(), see lib/llm/index.ts —
+      # GroqProvider is constructed lazily and never touched by a
+      # mocked test), and README documents that no test exercises a
+      # real Groq call in CI. Wired to a real secret anyway, never
+      # hardcoded, so nothing here needs to change if that ever does.
+      GROQ_MODEL: openai/gpt-oss-120b
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      # Deliberately UNSET: DATABASE_URL, SUPABASE_*, N8N_*. Leaving
+      # DATABASE_URL unset keeps lib/db/appPool.ts on its local
+      # POSTGRES_*-based branch (the service container above); leaving
+      # SUPABASE_URL unset keeps lib/storage/index.ts on
+      # LocalStorageProvider — both match how these same tests already
+      # run in local dev, not the Vercel/Supabase production path.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      # The local embedding model (~100MB, quantized) is downloaded
+      # once on first use (lib/embeddings/local-e5.ts) and cached on
+      # disk — without this, every CI run re-downloads it from
+      # HuggingFace.
+      - uses: actions/cache@v4
+        with:
+          path: .cache/transformers-models
+          key: transformers-cache-${{ env.EMBEDDING_MODEL }}
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run build
+
+      - run: npm run db:migrate
+
+      # RLS/RAG test fixtures (Acme Corp / Nova Bank) — NOT the demo
+      # dataset (db:seed-demo needs SUPABASE_DIRECT_URL and runs the
+      # full ingestion pipeline; out of scope for this job). Every
+      # integration test below reads this same fixture data back
+      # through app_role — see tests/integration/rls/helpers.mjs.
+      - run: npm run db:seed
+
+      - run: npm run test:phase3
+      - run: npm run test:phase5
+
+      # Live HTTP tests need a real running server (real login, a real
+      # signed session cookie) — see the header comment in
+      # tests/integration/auth/http-flow.test.mjs for why these can't
+      # be simulated at the function-call level like the suites above.
+      - name: Live HTTP tests (auth + conversations)
+        run: |
+          PORT=3100 npm run start &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3100/api/health > /dev/null && break
+            sleep 1
+          done
+          npm run test:auth-http
+          npm run test:conversations-http
+          kill "$SERVER_PID"

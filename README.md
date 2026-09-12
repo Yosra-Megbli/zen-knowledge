@@ -284,6 +284,20 @@ npm run test:phase3       # rls + embeddings + auth + rag
 npm run test:phase5       # rls + ingestion + rag5
 ```
 
+### CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) : sur chaque push/PR,
+service Postgres éphémère (`pgvector/pgvector:0.8.6-pg16`, même image que
+`docker/docker-compose.yml`) → install → lint → build → migrations →
+`db:seed` (fixtures RLS, pas le dataset de démo) → `test:phase3` +
+`test:phase5` → build+`start`+`test:auth-http`+`test:conversations-http`
+contre un vrai serveur. Aucun test CI n'appelle un vrai `GROQ_API_KEY`
+(cohérent avec "Limitations connues" ci-dessous) — `test:conversations-http`
+seed ses conversations directement via `ensureConversation`/`persistTurn`
+plutôt que par un vrai appel LLM. `APP_ROLE_PASSWORD`/`AUTH_SECRET` sont des
+valeurs jetables propres au job (rien de réel à protéger) ; `GROQ_API_KEY`
+est câblé sur `secrets.GROQ_API_KEY` si jamais un test réel s'y ajoute.
+
 Discipline : toutes les propriétés de sécurité listées ci-dessus sont
 vérifiées par un test qui échouerait si la propriété était violée —
 jamais uniquement par lecture de code ou convention. Plusieurs bugs
