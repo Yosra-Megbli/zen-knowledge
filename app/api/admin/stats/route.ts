@@ -25,7 +25,7 @@ export async function GET(request: Request) {
           COUNT(*)::int AS total,
           COUNT(*) FILTER (WHERE action = 'rag_answer')::int AS answers,
           COUNT(*) FILTER (WHERE action = 'rag_error')::int AS errors,
-          SUM((metadata->>'totalTokens')::int) AS total_tokens
+          SUM((metadata->>'totalTokens')::int)::int AS total_tokens
         FROM audit_logs
         WHERE action IN ('rag_answer','rag_refusal','rag_error')
       `),

@@ -130,7 +130,7 @@ export default function AdminPage() {
     },
     {
       label: "Tokens consommés",
-      value: totals.total_tokens?.toLocaleString("fr-FR") ?? "—",
+      value: totals.total_tokens != null ? Number(totals.total_tokens).toLocaleString("fr-FR") : "—",
       icon: Coins,
       sub: "Consommation LLM cumulée",
     },
@@ -188,7 +188,7 @@ export default function AdminPage() {
               <ul className="divide-y divide-ink-100">
                 {refusals.map((r, i) => (
                   <li key={i} className="px-5 py-3 flex items-center justify-between text-sm">
-                    <span className="text-ink-500">Question de {r.question_length} caractères</span>
+                    <span className="text-ink-500">Question de {r.question_length.toLocaleString("fr-FR")} caractères</span>
                     <span className="text-xs text-ink-300" title={new Date(r.created_at).toLocaleString("fr-FR")}>
                       {relativeTime(r.created_at)}
                     </span>
@@ -322,7 +322,7 @@ export default function AdminPage() {
             <ChevronLeft size={14} strokeWidth={2} />
             Précédent
           </button>
-          <span className="text-xs text-ink-300">Page {recent.page}</span>
+          <span className="text-xs text-ink-300">Page {recent.page.toLocaleString("fr-FR")}</span>
           <button
             onClick={() => setActivityPage((p) => p + 1)}
             disabled={!recent.hasNextPage || activityLoading}

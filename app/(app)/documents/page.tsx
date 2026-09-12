@@ -308,7 +308,7 @@ export default function DocumentsPage() {
                     {doc.latest_version && (
                       <span>
                         v{doc.latest_version}
-                        {doc.version_count > 1 && <span className="text-ink-300 ml-1">({doc.version_count})</span>}
+                        {doc.version_count > 1 && <span className="text-ink-300 ml-1">({doc.version_count} versions)</span>}
                       </span>
                     )}
                     {doc.review_date && (
