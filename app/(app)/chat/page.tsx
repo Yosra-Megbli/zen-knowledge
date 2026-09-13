@@ -22,6 +22,9 @@ import {
   Check,
   ChevronDown,
   FileText,
+  Zap,
+  Layers,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { LogoMark } from "../../components/Logo.tsx";
@@ -155,6 +158,7 @@ function ChatPageInner() {
   const [deletingAll, setDeletingAll] = useState(false);
   const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [sourcesPanelOpen, setSourcesPanelOpen] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -734,272 +738,450 @@ function ChatPageInner() {
     );
   }
 
-  return (
-    <div className="flex h-[calc(100vh-57px)]">
-      {sidebar}
-      <div className="flex-1 flex flex-col min-w-0 relative bg-paper-50/30">
-        <div className="md:hidden px-4 pt-3">{mobileHistoryButton}</div>
+  const latestAssistantMessage = [...messages].reverse().find(
+    (m) => m.role === "assistant" && m.citations && m.citations.length > 0
+  );
+  const currentCitations = latestAssistantMessage?.citations ?? [];
 
-        {/* Scrollable Messages Area */}
+  const currentConversation = conversations.find((c) => c.id === conversationId);
+  const conversationTitle =
+    currentConversation?.title ||
+    (messages.length > 0
+      ? messages.find((m) => m.role === "user")?.content.slice(0, 45) || "Conversation active"
+      : "Nouvelle conversation");
+
+  const rightSourcesPanel = (
+    <div className="flex flex-col h-full bg-white">
+      {/* Panel Header */}
+      <div className="h-12 px-4 border-b border-ink-100/70 flex items-center justify-between shrink-0 bg-paper-50/70">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-lime-100 text-lime-800">
+            <Layers size={14} strokeWidth={2.2} />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-xs font-semibold text-ink-950 truncate">
+              {currentCitations.length > 0 ? "Sources citées" : "Contexte RAG"}
+            </h3>
+            <p className="text-[10px] text-ink-400 truncate">
+              {currentCitations.length > 0
+                ? `${currentCitations.length} référence${currentCitations.length > 1 ? "s" : ""} active${currentCitations.length > 1 ? "s" : ""}`
+                : "Gouvernance & Sécurité"}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSourcesPanelOpen(false)}
+          className="p-1.5 text-ink-400 hover:text-ink-950 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
+          title="Masquer le volet des sources"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      {/* Panel Body */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+        {currentCitations.length > 0 ? (
+          currentCitations.map((c) => {
+            const isDeleted = c.documentStatus === "deleted" || c.versionStatus === "deleted";
+            const userMsg = [...messages].reverse().find((m) => m.role === "user")?.content;
+            const keywords = getQuestionKeywords(userMsg);
+            return (
+              <div
+                key={c.sourceIndex}
+                className="rounded-xl border border-ink-100 bg-white p-3.5 shadow-2xs hover:border-lime-300 hover:shadow-xs transition-all space-y-2.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime-100 text-[11px] font-bold text-lime-800">
+                      {c.sourceIndex}
+                    </span>
+                    <span className="font-semibold text-ink-950 text-xs truncate" title={c.documentTitle}>
+                      {c.documentTitle}
+                    </span>
+                  </div>
+                  {!isDeleted && (
+                    <a
+                      href={previewUrl(c)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 text-ink-400 hover:text-lime-700 hover:bg-paper-100 rounded transition-colors shrink-0"
+                      title="Ouvrir le document au passage utilisé"
+                    >
+                      <ExternalLink size={13} strokeWidth={2} />
+                    </a>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[10px] text-ink-500 font-medium flex-wrap">
+                  <span className="bg-paper-100 px-1.5 py-0.5 rounded border border-ink-100 text-ink-700">
+                    v{c.versionNumber}
+                  </span>
+                  {c.pageNumber && (
+                    <span className="bg-paper-100 px-1.5 py-0.5 rounded border border-ink-100 text-ink-700">
+                      Page {c.pageNumber}
+                    </span>
+                  )}
+                  {isDeleted && (
+                    <span className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded border border-red-200">
+                      Supprimé
+                    </span>
+                  )}
+                </div>
+
+                <div className="border-l-2 border-lime-400 bg-paper-50 p-2.5 rounded-r-lg text-ink-800">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1">
+                    Extrait cité
+                  </p>
+                  <p className="text-xs leading-relaxed italic line-clamp-6">
+                    &ldquo;{renderHighlightedSnippet(c.snippetText, keywords)}&rdquo;
+                  </p>
+                </div>
+
+                {!isDeleted && (
+                  <div className="pt-0.5 text-right">
+                    <a
+                      href={previewUrl(c)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-lime-700 hover:text-lime-800 hover:underline transition-colors"
+                    >
+                      <span>Voir le document complet</span>
+                      <ExternalLink size={11} />
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="space-y-3.5 py-1">
+            <div className="rounded-xl border border-ink-100 bg-paper-50/60 p-3.5 space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-ink-900">
+                <ShieldCheck size={16} className="text-lime-700" />
+                <span>Cloisonnement multi-sociétés</span>
+              </div>
+              <p className="text-ink-500 leading-relaxed text-[11px]">
+                Vos requêtes s&apos;exécutent sous contrôle strict de sécurité Row-Level Security (RLS). Aucune information d&apos;une autre société ne peut être divulguée.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-ink-100 bg-paper-50/60 p-3.5 space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-ink-900">
+                <Lock size={15} className="text-amber-600" />
+                <span>Filtrage par rôle & visibilité</span>
+              </div>
+              <p className="text-ink-500 leading-relaxed text-[11px]">
+                Le moteur filtre les documents autorisés selon votre rôle (Public, Entreprise, Département, Restreint).
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-ink-100 bg-paper-50/60 p-3.5 space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-ink-900">
+                <FileText size={15} className="text-blue-600" />
+                <span>Preuves & traçabilité</span>
+              </div>
+              <p className="text-ink-500 leading-relaxed text-[11px]">
+                Chaque affirmation de l&apos;assistant s&apos;appuie sur des extraits numérotés vérifiables. En l&apos;absence de source, le système refuse de répondre au lieu d&apos;halluciner.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-[calc(100vh-57px)] overflow-hidden">
+      {sidebar}
+
+      {/* Main chat section (center) */}
+      <div className="flex-1 flex flex-col min-w-0 relative bg-paper-50/30 h-full overflow-hidden">
+        {/* Top Chat Bar with title, latency and sources toggle */}
+        <div className="h-12 border-b border-ink-100/70 bg-white/80 backdrop-blur-xs px-4 flex items-center justify-between shrink-0 z-10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="md:hidden">{mobileHistoryButton}</div>
+            <h2 className="text-xs sm:text-sm font-semibold text-ink-900 truncate">
+              {conversationTitle}
+            </h2>
+            {latestAssistantMessage?.latencyMs && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-ink-500 font-mono bg-paper-100 px-2 py-0.5 rounded-full border border-ink-100">
+                <Zap size={11} className="text-amber-500" />
+                {latestAssistantMessage.latencyMs} ms
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSourcesPanelOpen((prev) => !prev)}
+              className={`hidden md:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                sourcesPanelOpen
+                  ? "bg-lime-50 text-lime-800 border-lime-300 font-semibold shadow-2xs"
+                  : "bg-white text-ink-600 hover:text-ink-950 border-ink-100 hover:bg-paper-50"
+              }`}
+              title={sourcesPanelOpen ? "Masquer le volet des sources" : "Afficher les sources et le contexte"}
+            >
+              <FileText size={13} className={sourcesPanelOpen ? "text-lime-700" : "text-ink-400"} />
+              <span>Sources</span>
+              {currentCitations.length > 0 && (
+                <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold bg-lime-500 text-ink-950">
+                  {currentCitations.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Messages Area — overflow-y-auto on FULL WIDTH */}
         <div
           ref={messagesContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full"
+          className="flex-1 overflow-y-auto w-full px-4 sm:px-6 py-6"
         >
-          {loadingHistory ? (
-            <div className="flex items-center justify-center py-20 gap-2 text-ink-400 text-sm">
-              <Loader2 size={18} className="animate-spin text-lime-600" />
-              <span>Chargement de la conversation…</span>
-            </div>
-          ) : (
-            messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[88%] sm:max-w-[85%] ${msg.role === "user" ? "order-2" : ""}`}>
-                  <div
-                    className={`rounded-2xl px-4 py-3.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                      msg.role === "user"
-                        ? "bg-ink-950 text-white rounded-br-sm shadow-2xs"
-                        : msg.refusal
-                        ? "bg-amber-50 border border-amber-200 text-amber-900 rounded-bl-sm"
-                        : "bg-white border border-ink-100 text-ink-900 rounded-bl-sm shadow-xs"
-                    }`}
-                  >
-                    {msg.role === "assistant" ? renderAnswer(msg.content, msg.citations ?? []) : msg.content}
-                  </div>
+          <div className="max-w-3xl mx-auto space-y-6">
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-20 gap-2 text-ink-400 text-sm">
+                <Loader2 size={18} className="animate-spin text-lime-600" />
+                <span>Chargement de la conversation…</span>
+              </div>
+            ) : (
+              messages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[88%] sm:max-w-[85%] ${msg.role === "user" ? "order-2" : ""}`}>
+                    <div
+                      className={`rounded-2xl px-4 py-3.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                        msg.role === "user"
+                          ? "bg-ink-950 text-white rounded-br-sm shadow-sm"
+                          : msg.refusal
+                          ? "bg-amber-50 text-amber-950 border border-amber-200 rounded-bl-sm"
+                          : "bg-white text-ink-900 border border-ink-100 rounded-bl-sm shadow-2xs"
+                      }`}
+                    >
+                      {msg.role === "assistant" && !msg.refusal
+                        ? renderAnswer(msg.content, msg.citations ?? [])
+                        : msg.content}
+                    </div>
 
-                  {/* Sources Cards */}
-                  {msg.citations && msg.citations.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-400 px-1">
-                        Sources citées
-                      </p>
-                      {msg.citations.map((c) => {
-                        const key = `${i}-${c.sourceIndex}`;
-                        const isDeleted = c.documentStatus === "deleted";
-                        const isExpanded = expanded === key;
-                        const isSnippetFull = !!expandedSnippets[key];
-                        // Find previous user message to extract keywords for highlighting
-                        const prevUserMsg = messages
-                          .slice(0, i)
-                          .reverse()
-                          .find((m) => m.role === "user");
-                        const keywords = getQuestionKeywords(prevUserMsg?.content);
-
-                        return (
-                          <div
-                            key={key}
-                            className={`group/src rounded-xl text-xs transition-all duration-200 border ${
-                              isExpanded
-                                ? "bg-lime-50/40 border-lime-400 shadow-xs ring-1 ring-lime-400/30"
-                                : "bg-white border-ink-100 hover:border-lime-300 shadow-2xs"
-                            }`}
+                    {/* Citations Preview Accordion below message */}
+                    {msg.citations && msg.citations.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                            Sources citées ({msg.citations.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSourcesPanelOpen(true)}
+                            className="hidden lg:inline-flex items-center gap-1 text-[11px] font-medium text-lime-700 hover:text-lime-800 hover:underline"
                           >
-                            <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-                              <button
-                                onClick={() => setExpanded(isExpanded ? null : key)}
-                                className="flex-1 min-w-0 flex items-center gap-2 text-left font-medium text-ink-800 truncate hover:text-lime-700 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-1 rounded-lg"
-                              >
-                                <span
-                                  className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
-                                    isExpanded
-                                      ? "bg-lime-500 text-ink-950"
-                                      : "bg-lime-100 text-lime-800"
-                                  }`}
-                                >
-                                  {c.sourceIndex}
-                                </span>
-                                <FileText
-                                  size={14}
-                                  className={`shrink-0 transition-colors ${
-                                    isExpanded
-                                      ? "text-lime-600"
-                                      : "text-ink-400 group-hover/src:text-lime-600"
-                                  }`}
-                                />
-                                <span className="truncate font-semibold text-ink-900">
-                                  {c.documentTitle}
-                                </span>
-                                {isDeleted && (
-                                  <span className="text-ink-300 font-normal shrink-0">
-                                    (document supprimé)
-                                  </span>
-                                )}
-                              </button>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[11px] text-ink-400 bg-paper-200 px-2 py-0.5 rounded-full font-medium">
-                                  v{c.versionNumber}
-                                  {c.pageNumber ? ` · p.${c.pageNumber}` : ""}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setExpanded(isExpanded ? null : key)}
-                                  className="p-1 text-ink-400 hover:text-ink-700 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 rounded"
-                                  title={isExpanded ? "Replier la source" : "Déplier la source"}
-                                >
-                                  <ChevronDown
-                                    size={14}
-                                    strokeWidth={2.5}
-                                    className={`transition-transform duration-200 ${
-                                      isExpanded ? "rotate-180 text-lime-600" : ""
-                                    }`}
-                                  />
-                                </button>
-                                {!isDeleted && (
-                                  <a
-                                    href={previewUrl(c)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-1 text-ink-400 hover:text-lime-700 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 rounded"
-                                    title="Ouvrir le document au passage utilisé"
-                                  >
-                                    <ExternalLink size={13} strokeWidth={2} />
-                                  </a>
-                                )}
-                              </div>
-                            </div>
+                            <span>Inspecter dans le volet</span>
+                            <ExternalLink size={10} />
+                          </button>
+                        </div>
+                        {msg.citations.map((c) => {
+                          const key = `${i}-${c.sourceIndex}`;
+                          const isExpanded = expanded === key;
+                          const isSnippetFull = !!expandedSnippets[key];
+                          const isDeleted = c.documentStatus === "deleted" || c.versionStatus === "deleted";
+                          const userMsg = messages[i - 1]?.role === "user" ? messages[i - 1].content : undefined;
+                          const keywords = getQuestionKeywords(userMsg);
 
-                            {/* Hierarchical Preview with smooth height transition */}
+                          return (
                             <div
-                              className={`grid transition-[grid-template-rows] duration-200 ease-out ${
-                                isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                              key={c.sourceIndex}
+                              className={`group/source rounded-xl border text-xs transition-all duration-200 ${
+                                isExpanded
+                                  ? "border-lime-400 bg-lime-50/20 shadow-xs ring-1 ring-lime-400/40"
+                                  : "border-ink-100 bg-white hover:border-lime-300 hover:bg-paper-50/50"
                               }`}
                             >
-                              <div className="overflow-hidden">
-                                <div className="px-3 pb-3 pt-1 border-t border-ink-100/60">
-                                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5 mt-1">
-                                    Extrait cité
-                                  </p>
-                                  <div className="border-l-2 border-lime-400 bg-paper-100 p-3 rounded-r-lg text-ink-800">
-                                    <p
-                                      className={`text-[12px] leading-relaxed italic ${
-                                        isSnippetFull ? "" : "line-clamp-3"
-                                      }`}
-                                    >
-                                      &ldquo;{renderHighlightedSnippet(c.snippetText, keywords)}&rdquo;
-                                    </p>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setExpandedSnippets((prev) => ({
-                                          ...prev,
-                                          [key]: !prev[key],
-                                        }));
-                                      }}
-                                      className="mt-1.5 text-[11px] font-medium text-lime-700 hover:text-lime-800 hover:underline outline-none focus:outline-none focus-visible:ring-1 focus-visible:ring-lime-500 rounded cursor-pointer"
-                                    >
-                                      {isSnippetFull ? "Voir moins" : "Voir plus"}
-                                    </button>
-                                  </div>
+                              <div
+                                onClick={() => setExpanded(isExpanded ? null : key)}
+                                className="flex items-center justify-between p-2.5 cursor-pointer select-none rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime-100 text-[11px] font-bold text-lime-800 group-hover/source:bg-lime-400 transition-colors">
+                                    {c.sourceIndex}
+                                  </span>
+                                  <span className="font-semibold text-ink-900 truncate" title={c.documentTitle}>
+                                    {c.documentTitle}
+                                  </span>
+                                  <span className="shrink-0 text-ink-400 text-[11px]">v{c.versionNumber}</span>
+                                  {c.pageNumber && (
+                                    <span className="shrink-0 text-ink-400 text-[11px]">p.{c.pageNumber}</span>
+                                  )}
+                                  {isDeleted && (
+                                    <span className="shrink-0 text-red-600 bg-red-50 text-[10px] px-1.5 py-0.5 rounded border border-red-200">
+                                      Supprimé
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                  <ChevronDown
+                                    size={14}
+                                    className={`text-ink-400 transition-transform duration-200 ${
+                                      isExpanded ? "rotate-180 text-lime-700" : ""
+                                    }`}
+                                  />
                                   {!isDeleted && (
-                                    <div className="mt-2 text-right">
-                                      <a
-                                        href={previewUrl(c)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-lime-700 hover:text-lime-800 hover:underline transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 rounded"
-                                      >
-                                        Voir le document complet →
-                                      </a>
-                                    </div>
+                                    <a
+                                      href={previewUrl(c)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 text-ink-400 hover:text-lime-700 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 rounded"
+                                      title="Ouvrir le document au passage utilisé"
+                                    >
+                                      <ExternalLink size={13} strokeWidth={2} />
+                                    </a>
                                   )}
                                 </div>
                               </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
 
-                  {/* Actions (Feedback, Copier) + Latency */}
-                  {msg.role === "assistant" && !msg.refusal && (
-                    <div className="flex items-center justify-between gap-3 mt-2 px-1">
-                      <div className="flex items-center gap-1.5">
-                        {msg.messageId && (
-                          <>
-                            <button
-                              onClick={() => sendFeedback(i, "useful")}
-                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 ${
-                                msg.feedback === "useful"
-                                  ? "bg-lime-100 text-lime-700 ring-1 ring-lime-400 font-semibold"
-                                  : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
-                              }`}
-                              title="Réponse utile"
-                            >
-                              <ThumbsUp size={13} strokeWidth={2} />
-                              <span className="text-[11px]">Utile</span>
-                            </button>
-                            <button
-                              onClick={() => sendFeedback(i, "not_useful")}
-                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
-                                msg.feedback === "not_useful"
-                                  ? "bg-red-100 text-red-700 ring-1 ring-red-400 font-semibold"
-                                  : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
-                              }`}
-                              title="Réponse inexacte ou incomplète"
-                            >
-                              <ThumbsDown size={13} strokeWidth={2} />
-                              <span className="text-[11px]">Inexact</span>
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() => handleCopy(i, msg.content)}
-                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-400 hover:bg-paper-200 hover:text-ink-700 transition-colors ml-1 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
-                          title="Copier la réponse"
-                        >
-                          {copiedMessageIndex === i ? (
+                              {/* Hierarchical Preview with smooth height transition */}
+                              <div
+                                className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                                  isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                                }`}
+                              >
+                                <div className="overflow-hidden">
+                                  <div className="px-3 pb-3 pt-1 border-t border-ink-100/60">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5 mt-1">
+                                      Extrait cité
+                                    </p>
+                                    <div className="border-l-2 border-lime-400 bg-paper-100 p-3 rounded-r-lg text-ink-800">
+                                      <p
+                                        className={`text-[12px] leading-relaxed italic ${
+                                          isSnippetFull ? "" : "line-clamp-3"
+                                        }`}
+                                      >
+                                        &ldquo;{renderHighlightedSnippet(c.snippetText, keywords)}&rdquo;
+                                      </p>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExpandedSnippets((prev) => ({
+                                            ...prev,
+                                            [key]: !prev[key],
+                                          }));
+                                        }}
+                                        className="mt-1.5 text-[11px] font-medium text-lime-700 hover:text-lime-800 hover:underline outline-none focus:outline-none focus-visible:ring-1 focus-visible:ring-lime-500 rounded cursor-pointer"
+                                      >
+                                        {isSnippetFull ? "Voir moins" : "Voir plus"}
+                                      </button>
+                                    </div>
+                                    {!isDeleted && (
+                                      <div className="mt-2 text-right">
+                                        <a
+                                          href={previewUrl(c)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-lime-700 hover:text-lime-800 hover:underline transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 rounded"
+                                        >
+                                          Voir le document complet →
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Actions (Feedback, Copier) + Latency */}
+                    {msg.role === "assistant" && !msg.refusal && (
+                      <div className="flex items-center justify-between gap-3 mt-2 px-1">
+                        <div className="flex items-center gap-1.5">
+                          {msg.messageId && (
                             <>
-                              <Check size={13} className="text-lime-600" strokeWidth={2.5} />
-                              <span className="text-[11px] text-lime-700 font-semibold">Copié ✓</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy size={13} strokeWidth={2} />
-                              <span className="text-[11px]">Copier</span>
+                              <button
+                                onClick={() => sendFeedback(i, "useful")}
+                                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 ${
+                                  msg.feedback === "useful"
+                                    ? "bg-lime-100 text-lime-700 ring-1 ring-lime-400 font-semibold"
+                                    : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                                }`}
+                                title="Réponse utile"
+                              >
+                                <ThumbsUp size={13} strokeWidth={2} />
+                                <span className="text-[11px]">Utile</span>
+                              </button>
+                              <button
+                                onClick={() => sendFeedback(i, "not_useful")}
+                                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
+                                  msg.feedback === "not_useful"
+                                    ? "bg-red-100 text-red-700 ring-1 ring-red-400 font-semibold"
+                                    : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                                }`}
+                                title="Réponse inexacte ou incomplète"
+                              >
+                                <ThumbsDown size={13} strokeWidth={2} />
+                                <span className="text-[11px]">Inexact</span>
+                              </button>
                             </>
                           )}
-                        </button>
+                          <button
+                            onClick={() => handleCopy(i, msg.content)}
+                            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-400 hover:bg-paper-200 hover:text-ink-700 transition-colors ml-1 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
+                            title="Copier la réponse"
+                          >
+                            {copiedMessageIndex === i ? (
+                              <>
+                                <Check size={13} className="text-lime-600" />
+                                <span className="text-[11px] text-lime-700 font-medium">Copié !</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={13} strokeWidth={2} />
+                                <span className="text-[11px]">Copier</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        {msg.latencyMs != null && (
+                          <span className="text-[10px] text-ink-300 font-mono" title="Temps de réponse de l'IA">
+                            {msg.latencyMs} ms
+                          </span>
+                        )}
                       </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
 
-                      {msg.latencyMs != null && (
-                        <span className="text-[11px] font-mono text-ink-300">
-                          {(msg.latencyMs / 1000).toFixed(1)}s
-                        </span>
-                      )}
-                    </div>
-                  )}
+            {/* Typing Indicator during generation */}
+            {loading && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-ink-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-2xs flex items-center gap-3 text-sm text-ink-600">
+                  <div className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce [animation-delay:-0.3s]" />
+                    <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce [animation-delay:-0.15s]" />
+                    <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce" />
+                  </div>
+                  <span className="text-xs font-medium text-ink-500">
+                    {loadingPhase === "retrieving"
+                      ? "Recherche dans vos documents…"
+                      : "Génération de la réponse…"}
+                  </span>
                 </div>
               </div>
-            ))
-          )}
-
-          {/* Typing Indicator during generation */}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-white border border-ink-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-2xs flex items-center gap-3 text-sm text-ink-600">
-                <div className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce [animation-delay:-0.3s]" />
-                  <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce [animation-delay:-0.15s]" />
-                  <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce" />
-                </div>
-                <span className="text-xs font-medium text-ink-500">
-                  {loadingPhase === "retrieving"
-                    ? "Recherche dans vos documents…"
-                    : "Génération de la réponse…"}
-                </span>
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef} />
+            )}
+            <div ref={bottomRef} />
+          </div>
         </div>
 
         {/* Floating Scroll-to-bottom Button */}
         {showScrollBottom && (
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-24 right-6 md:right-8 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-white border border-ink-100 shadow-md text-ink-600 hover:text-ink-950 hover:bg-paper-100 transition-all hover:scale-105 active:scale-95 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
+            className="absolute bottom-20 right-6 md:right-8 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-white border border-ink-100 shadow-md text-ink-600 hover:text-ink-950 hover:bg-paper-100 transition-all hover:scale-105 active:scale-95 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
             title="Défiler vers le bas"
           >
             <ChevronDown size={18} strokeWidth={2.5} />
@@ -1007,10 +1189,19 @@ function ChatPageInner() {
         )}
 
         {/* Sticky Input Bar */}
-        <div className="border-t border-ink-100 bg-white/95 backdrop-blur-xs px-4 py-4">
-          {inputForm}
+        <div className="border-t border-ink-100 bg-white/95 backdrop-blur-xs px-4 py-3 shrink-0">
+          <div className="max-w-3xl mx-auto">
+            {inputForm}
+          </div>
         </div>
       </div>
+
+      {/* Right-Hand Sources & Context Panel */}
+      {sourcesPanelOpen && (
+        <div className="hidden lg:flex w-80 xl:w-96 border-l border-ink-100 bg-white flex-col shrink-0 h-full overflow-hidden shadow-2xs">
+          {rightSourcesPanel}
+        </div>
+      )}
     </div>
   );
 }
