@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ExternalLink, Trash2, FileUp } from "lucide-react";
+import { ExternalLink, Trash2, FileUp, Calendar } from "lucide-react";
+import { CustomSelect } from "../../components/CustomSelect.tsx";
 
 interface Document {
   id: string;
@@ -230,26 +231,26 @@ export default function DocumentsPage() {
           />
           {/* Filters row + counter */}
           <div className="flex items-center gap-2">
-            <select
+            <CustomSelect
+              id="status-filter"
+              className="flex-1"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="flex-1 border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
-            >
-              <option value="all">Tous les statuts</option>
-              {statusOptions.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-            <select
+              onChange={setStatusFilter}
+              options={[
+                { value: "all", label: "Tous les statuts" },
+                ...statusOptions.map((s) => ({ value: s, label: s })),
+              ]}
+            />
+            <CustomSelect
+              id="visibility-filter"
+              className="flex-1"
               value={visibilityFilter}
-              onChange={(e) => setVisibilityFilter(e.target.value)}
-              className="flex-1 border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
-            >
-              <option value="all">Toutes visibilités</option>
-              {Object.entries(VISIBILITY_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
+              onChange={setVisibilityFilter}
+              options={[
+                { value: "all", label: "Toutes visibilités" },
+                ...Object.entries(VISIBILITY_LABELS).map(([value, label]) => ({ value, label })),
+              ]}
+            />
             <span className="text-xs text-ink-300 whitespace-nowrap shrink-0">
               {filteredDocs.length} doc{filteredDocs.length !== 1 ? "s" : ""}
             </span>
@@ -561,15 +562,16 @@ export default function DocumentsPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-ink-700">Visibilité</label>
-                <select
+                <CustomSelect
+                  id="modal-visibility"
                   value={form.visibility}
-                  onChange={(e) => setForm((f) => ({ ...f, visibility: e.target.value as "company" | "department" | "restricted" }))}
-                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
-                >
-                  <option value="company">Entreprise</option>
-                  <option value="department">Département</option>
-                  <option value="restricted">Restreint</option>
-                </select>
+                  onChange={(v) => setForm((f) => ({ ...f, visibility: v as "company" | "department" | "restricted" }))}
+                  options={[
+                    { value: "company", label: "Entreprise" },
+                    { value: "department", label: "Département" },
+                    { value: "restricted", label: "Restreint" },
+                  ]}
+                />
               </div>
               {form.visibility === "department" && (
                 <div className="flex flex-col gap-1.5">
@@ -579,30 +581,37 @@ export default function DocumentsPage() {
                       Aucun département configuré pour votre entreprise.
                     </p>
                   ) : (
-                    <select
+                    <CustomSelect
+                      id="modal-department"
                       required
                       value={form.departmentId}
-                      onChange={(e) => setForm((f) => ({ ...f, departmentId: e.target.value }))}
-                      className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
-                    >
-                      <option value="">Sélectionnez un département</option>
-                      {departments.map((dept) => (
-                        <option key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => setForm((f) => ({ ...f, departmentId: v }))}
+                      options={[
+                        { value: "", label: "Sélectionnez un département" },
+                        ...departments.map((dept) => ({ value: dept.id, label: dept.name })),
+                      ]}
+                    />
                   )}
                 </div>
               )}
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-ink-700">Date de révision</label>
-                <input
-                  type="date"
-                  value={form.reviewDate}
-                  onChange={(e) => setForm((f) => ({ ...f, reviewDate: e.target.value }))}
-                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <Calendar size={15} className="text-ink-300" strokeWidth={1.75} />
+                  </span>
+                  {!form.reviewDate && (
+                    <span className="absolute left-9 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-ink-300 select-none">
+                      jj/mm/aaaa
+                    </span>
+                  )}
+                  <input
+                    type="date"
+                    value={form.reviewDate}
+                    onChange={(e) => setForm((f) => ({ ...f, reviewDate: e.target.value }))}
+                    className="w-full border border-ink-100 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
+                  />
+                </div>
                 <p className="text-xs text-ink-400">Facultatif — utilisé pour le suivi d&apos;obsolescence.</p>
               </div>
               <hr className="border-ink-100 my-1" />

@@ -44,8 +44,8 @@ export function HighlightedText({ text, highlightText }: { text: string; highlig
   }, [segments]);
 
   return (
-    <div className="bg-white rounded-2xl border border-ink-100 p-4 md:p-6">
-      <pre className="whitespace-pre-wrap font-sans text-sm text-ink-900 leading-relaxed">
+    <div className="bg-white rounded-2xl border border-ink-100 p-4 md:p-6 overflow-x-hidden">
+      <pre className="whitespace-pre-wrap font-sans text-sm text-ink-900 leading-relaxed break-words min-w-0">
         {segments ? (
           <>
             {segments.before}

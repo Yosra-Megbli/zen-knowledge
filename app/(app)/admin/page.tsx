@@ -218,7 +218,7 @@ export default function AdminPage() {
             >
               <h2 className="font-medium text-amber-700 flex items-center gap-2">
                 <AlertTriangle size={15} strokeWidth={2} className="text-amber-500 shrink-0" />
-                {overdueDocuments.length.toLocaleString("fr-FR")} document{overdueDocuments.length > 1 ? "s" : ""} dépassent leur date de révision
+                {overdueDocuments.length.toLocaleString("fr-FR")} document{overdueDocuments.length > 1 ? "s" : ""} {overdueDocuments.length > 1 ? "dépassent" : "dépasse"} leur date de révision
               </h2>
               <ChevronDown
                 size={14}
@@ -270,8 +270,9 @@ export default function AdminPage() {
 
       {/* Activité récente */}
       <div className={`bg-white rounded-2xl border border-ink-100 overflow-hidden ${activityLoading ? "opacity-60" : ""}`}>
-        <div className="px-5 py-4 border-b border-ink-100">
+        <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between gap-3">
           <h2 className="font-medium text-ink-700">Activité récente</h2>
+          <span className="sm:hidden text-xs text-ink-300 italic shrink-0">← Faites glisser pour voir plus →</span>
         </div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[600px] text-sm">
