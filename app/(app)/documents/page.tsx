@@ -829,22 +829,22 @@ export default function DocumentsPage() {
             })}
           </div>
 
-          {/* ── Desktop table (md+) — 100% visible sans scroll à 1366px ── */}
-          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-visible shadow-2xs">
-            <table className="w-full text-sm table-fixed">
+          {/* ── Desktop table (md+) — responsive avec scroll horizontal contrôlé & alignement top ── */}
+          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-x-auto shadow-2xs">
+            <table className="w-full min-w-[960px] text-sm table-fixed">
               <colgroup>
-                <col className="w-[23%]" />
-                <col className="w-[14%]" />
-                <col className="w-[9%]" />
-                <col className="w-[11%]" />
-                <col className="w-[5%]" />
-                <col className="w-[15%]" />
-                <col className="w-[15%]" />
-                <col className="w-[8%]" />
+                <col className="w-[22%] min-w-[190px]" />
+                <col className="w-[14%] min-w-[130px]" />
+                <col className="w-[9%] min-w-[85px]" />
+                <col className="w-[12%] min-w-[115px]" />
+                <col className="w-[6%] min-w-[65px]" />
+                <col className="w-[14%] min-w-[130px]" />
+                <col className="w-[15%] min-w-[140px]" />
+                <col className="w-[8%] min-w-[75px]" />
               </colgroup>
               <thead className="sticky top-0 bg-paper-100/95 backdrop-blur-xs border-b border-ink-100 z-10 shadow-2xs">
                 <tr>
-                  <th className="text-left px-3.5 py-3 font-medium text-ink-500">
+                  <th className="text-left px-3.5 py-3 font-medium text-ink-500 whitespace-nowrap">
                     {renderSortHeader("title", "Titre")}
                   </th>
                   <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
@@ -871,7 +871,7 @@ export default function DocumentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-100">
-                {filteredDocs.map((doc) => {
+                {filteredDocs.map((doc, docIndex) => {
                   const statusKey = doc.latest_status ?? doc.status;
                   const isOverdue =
                     doc.status === "published" &&
@@ -882,39 +882,49 @@ export default function DocumentsPage() {
                   return (
                     <tr
                       key={doc.id}
-                      className={`hover:bg-paper-50 transition-colors ${
+                      className={`align-top hover:bg-paper-50 transition-colors ${
                         isArchived ? "opacity-60 bg-paper-100/40" : ""
                       }`}
                     >
-                      {/* Titre (max-w, 2 lignes max) */}
-                      <td className="px-3.5 py-2.5">
-                        <p className="font-semibold text-ink-950 truncate text-xs sm:text-sm" title={doc.title}>
-                          {doc.title}
-                        </p>
-                        {doc.description && (
-                          <p className="text-xs text-ink-400 truncate mt-0.5" title={doc.description}>
-                            {doc.description}
+                      {/* Titre (proprement tronqué avec ellipsis CSS et title natif complet) */}
+                      <td className="px-3.5 py-2.5 align-top overflow-hidden">
+                        <div className="min-w-0 w-full overflow-hidden">
+                          <p
+                            className="font-semibold text-ink-950 truncate block text-xs sm:text-sm cursor-default"
+                            title={doc.title}
+                          >
+                            {doc.title}
                           </p>
-                        )}
+                          {doc.description && (
+                            <p
+                              className="text-xs text-ink-400 truncate block mt-0.5 cursor-default"
+                              title={doc.description}
+                            >
+                              {doc.description}
+                            </p>
+                          )}
+                        </div>
                       </td>
 
-                      {/* Société · Service (2 lignes max) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <span className="font-medium text-ink-900 text-xs truncate block" title={doc.company_name}>
-                          {doc.company_name ?? "—"}
-                        </span>
-                        <span
-                          className="text-[11px] text-ink-500 truncate block mt-0.5"
-                          title={doc.department_name ?? "Groupe (Général)"}
-                        >
-                          {doc.department_name ?? "Groupe (Général)"}
-                        </span>
+                      {/* Société · Service (2 lignes max, aligné en haut) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap align-top overflow-hidden">
+                        <div className="min-w-0 w-full overflow-hidden">
+                          <span className="font-medium text-ink-900 text-xs truncate block" title={doc.company_name}>
+                            {doc.company_name ?? "—"}
+                          </span>
+                          <span
+                            className="text-[11px] text-ink-500 truncate block mt-0.5"
+                            title={doc.department_name ?? "Groupe (Général)"}
+                          >
+                            {doc.department_name ?? "Groupe (Général)"}
+                          </span>
+                        </div>
                       </td>
 
-                      {/* Visibilité */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      {/* Visibilité (badge aligné en haut) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap align-top">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                             VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"
                           }`}
                         >
@@ -922,17 +932,17 @@ export default function DocumentsPage() {
                         </span>
                       </td>
 
-                      {/* Statut & Erreur */}
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <div className="flex flex-col items-start gap-1">
+                      {/* Statut & Erreur (troncature propre et pas de débordement) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap align-top overflow-hidden">
+                        <div className="flex flex-col items-start gap-1 min-w-0 w-full max-w-full overflow-hidden">
                           {retryingId === doc.latest_version_id ? (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 animate-pulse flex items-center gap-1">
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 animate-pulse flex items-center gap-1 shrink-0">
                               <RefreshCw size={11} className="animate-spin" />
                               <span>Indexation…</span>
                             </span>
                           ) : (
                             <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${
                                 STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"
                               }`}
                             >
@@ -941,55 +951,61 @@ export default function DocumentsPage() {
                           )}
                           {doc.latest_status === "failed" && doc.latest_error_message && retryingId !== doc.latest_version_id && (
                             <div
-                              className="flex items-center gap-1 text-[11px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 max-w-[140px]"
+                              className="flex items-center gap-1 text-[11px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 min-w-0 max-w-full w-full overflow-hidden cursor-help"
                               title={doc.latest_error_message}
                             >
                               <AlertCircle size={10} className="shrink-0 text-red-500" />
-                              <span className="truncate">{doc.latest_error_message}</span>
+                              <span className="truncate block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                                {doc.latest_error_message}
+                              </span>
                             </div>
                           )}
                         </div>
                       </td>
 
-                      {/* Version */}
-                      <td className="px-3 py-2.5 whitespace-nowrap text-ink-600 text-xs">
-                        {doc.latest_version ? `v${doc.latest_version}` : "—"}
-                        {doc.version_count > 1 && (
-                          <span className="text-[11px] text-ink-400 ml-1">({doc.version_count} v.)</span>
-                        )}
+                      {/* Version (aligné en haut) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap align-top text-ink-600 text-xs">
+                        <span className="inline-block mt-0.5">
+                          {doc.latest_version ? `v${doc.latest_version}` : "—"}
+                          {doc.version_count > 1 && (
+                            <span className="text-[11px] text-ink-400 ml-1">({doc.version_count} v.)</span>
+                          )}
+                        </span>
                       </td>
 
-                      {/* Propriétaire (Nom seul, email en title) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap text-xs">
+                      {/* Propriétaire (Nom seul, email en title, aligné en haut) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap align-top text-xs overflow-hidden">
                         <span
-                          className="font-medium text-ink-900 truncate block cursor-default"
+                          className="font-medium text-ink-900 truncate block cursor-default mt-0.5"
                           title={doc.owner_email}
                         >
                           {doc.owner_name || doc.owner_email}
                         </span>
                       </td>
 
-                      {/* Date de révision */}
-                      <td className="px-3 py-2.5 whitespace-nowrap text-xs">
-                        {doc.review_date ? (
-                          <span
-                            className={
-                              isOverdue
-                                ? "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
-                                : "text-ink-600"
-                            }
-                            title={isOverdue ? "Date de révision dépassée" : undefined}
-                          >
-                            {new Date(doc.review_date).toLocaleDateString("fr-FR")}
-                            {isOverdue && " · Dépassée"}
-                          </span>
-                        ) : (
-                          <span className="text-ink-400">—</span>
-                        )}
+                      {/* Date de révision (aligné en haut) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap align-top text-xs overflow-hidden">
+                        <div className="mt-0.5">
+                          {doc.review_date ? (
+                            <span
+                              className={
+                                isOverdue
+                                  ? "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
+                                  : "text-ink-600"
+                              }
+                              title={isOverdue ? "Date de révision dépassée" : undefined}
+                            >
+                              {new Date(doc.review_date).toLocaleDateString("fr-FR")}
+                              {isOverdue && " · Dépassée"}
+                            </span>
+                          ) : (
+                            <span className="text-ink-400">—</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Action (icônes standardisées avec menu kebab ⋯ parfaitement aligné) */}
-                      <td className="px-3 py-2.5 text-right relative whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-right align-top relative whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-1">
                           {/* Voir le document (toujours présent dans toutes les lignes) */}
                           {doc.latest_version_id && (
@@ -1018,7 +1034,11 @@ export default function DocumentsPage() {
 
                               {kebabOpenId === doc.id && (
                                 <div
-                                  className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-ink-100 py-1 z-30 animate-in fade-in"
+                                  className={`absolute right-0 ${
+                                    docIndex >= Math.max(0, filteredDocs.length - 2)
+                                      ? "bottom-full mb-1"
+                                      : "top-full mt-1"
+                                  } w-44 bg-white rounded-xl shadow-lg border border-ink-100 py-1 z-30 animate-in fade-in`}
                                   onMouseLeave={() => setKebabOpenId(null)}
                                 >
                                   {/* Réactiver si archivé */}
