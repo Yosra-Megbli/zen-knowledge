@@ -14,6 +14,8 @@ export async function GET() {
       visibility: string;
       status: string;
       owner_email: string;
+      owner_name: string;
+      company_name: string;
       department_name: string | null;
       version_count: number;
       latest_version: number | null;
@@ -30,6 +32,8 @@ export async function GET() {
         d.visibility,
         d.status,
         u.email AS owner_email,
+        COALESCE(u.name, u.email) AS owner_name,
+        c.name AS company_name,
         dep.name AS department_name,
         COUNT(v.id)::int AS version_count,
         MAX(v.version_number) AS latest_version,
@@ -46,11 +50,12 @@ export async function GET() {
         d.review_date,
         d.created_at
       FROM documents d
+      JOIN companies c ON c.id = d.company_id
       JOIN users u ON u.id = d.owner_id
       LEFT JOIN departments dep ON dep.id = d.department_id
       LEFT JOIN document_versions v ON v.document_id = d.id
       WHERE d.status != 'deleted'
-      GROUP BY d.id, u.email, dep.name
+      GROUP BY d.id, u.email, u.name, c.name, dep.name
       ORDER BY (
         (SELECT v2.status FROM document_versions v2
          WHERE v2.document_id = d.id

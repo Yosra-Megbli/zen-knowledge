@@ -1,7 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ExternalLink, Trash2, FileUp, Calendar } from "lucide-react";
+import {
+  ExternalLink,
+  Trash2,
+  FileUp,
+  Calendar,
+  RefreshCw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  AlertCircle,
+  CheckCircle2,
+  X,
+} from "lucide-react";
 import { CustomSelect } from "../../components/CustomSelect.tsx";
 
 interface Document {
@@ -11,6 +23,8 @@ interface Document {
   visibility: string;
   status: string;
   owner_email: string;
+  owner_name?: string;
+  company_name?: string;
   department_name: string | null;
   version_count: number;
   latest_version: number | null;
@@ -27,24 +41,34 @@ const VISIBILITY_LABELS: Record<string, string> = {
   restricted: "Restreint",
 };
 
-// "restricted" gets a visually distinct (amber) badge so
-// confidentiality is legible at a glance in the table, not just
-// identical styling to the other two (non-sensitive) visibilities.
 const VISIBILITY_COLORS: Record<string, string> = {
   restricted: "bg-amber-50 text-amber-700 border border-amber-200",
+  department: "bg-paper-100 text-ink-700 border border-ink-100",
+  company: "bg-paper-50 text-ink-600 border border-ink-100",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  published: "Publié",
+  ready: "Prêt",
+  processing: "En cours",
+  indexing: "En cours",
+  failed: "Échec",
+  draft: "Brouillon",
+  archived: "Archivé",
+  unpublished: "Dépublié",
+  pending_review: "En attente",
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  published: "bg-green-100 text-green-700",
-  draft: "bg-yellow-100 text-yellow-700",
-  archived: "bg-ink-100 text-ink-500",
-  pending_review: "bg-blue-100 text-blue-700",
-  // Ingestion succeeded (extraction/chunking/embeddings done) but the
-  // document has NOT been published yet — awaiting explicit review.
-  // Upload never auto-publishes; see handlePublish below.
-  ready: "bg-blue-100 text-blue-700",
-  failed: "bg-red-100 text-red-700",
+  published: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  ready: "bg-blue-50 text-blue-700 border border-blue-200",
+  processing: "bg-amber-50 text-amber-700 border border-amber-200 animate-pulse",
+  indexing: "bg-amber-50 text-amber-700 border border-amber-200 animate-pulse",
+  failed: "bg-red-50 text-red-700 border border-red-200",
+  draft: "bg-yellow-50 text-yellow-700 border border-yellow-200",
+  archived: "bg-ink-100 text-ink-500 border border-ink-200",
   unpublished: "bg-gray-100 text-gray-700 border border-gray-200",
+  pending_review: "bg-blue-50 text-blue-700 border border-blue-200",
 };
 
 function formatFileSize(bytes: number): string {
@@ -63,9 +87,19 @@ export default function DocumentsPage() {
   const [showModal, setShowModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ versionId: string; title: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // Filters state
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [visibilityFilter, setVisibilityFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+
+  // Sorting state
+  const [sortField, setSortField] = useState<"title" | "version" | "review_date">("title");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState({
     title: "",
@@ -76,6 +110,11 @@ export default function DocumentsPage() {
     file: null as File | null,
   });
 
+  function showToast(message: string, type: "success" | "error" = "success") {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }
+
   const fetchDocs = useCallback(async () => {
     setLoading(true);
     const res = await fetch("/api/documents/list");
@@ -84,9 +123,6 @@ export default function DocumentsPage() {
   }, []);
 
   useEffect(() => {
-    // Standard fetch-on-mount pattern (no data-fetching library in this
-    // stack); the effect itself sets no state directly, it only invokes
-    // fetchDocs(), whose own setState calls happen after the async fetch.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDocs();
 
@@ -96,26 +132,87 @@ export default function DocumentsPage() {
       .catch(() => setDepartments([]));
   }, [fetchDocs]);
 
-  // Client-side only — /api/documents/list already scopes results to
-  // the caller's company/permissions via RLS; this just narrows what's
-  // already been authorized to fetch, never a second access check.
   const filteredDocs = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return docs.filter((doc) => {
+    const result = docs.filter((doc) => {
       if (q && !doc.title.toLowerCase().includes(q) && !(doc.description ?? "").toLowerCase().includes(q)) {
         return false;
       }
       const status = doc.latest_status ?? doc.status;
       if (statusFilter !== "all" && status !== statusFilter) return false;
       if (visibilityFilter !== "all" && doc.visibility !== visibilityFilter) return false;
+      if (companyFilter !== "all" && (doc.company_name ?? "") !== companyFilter) return false;
+      if (departmentFilter !== "all") {
+        if (departmentFilter === "none" && doc.department_name) return false;
+        if (departmentFilter !== "none" && doc.department_name !== departmentFilter) return false;
+      }
       return true;
     });
-  }, [docs, search, statusFilter, visibilityFilter]);
+
+    result.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "title") {
+        cmp = a.title.localeCompare(b.title, "fr", { sensitivity: "base" });
+      } else if (sortField === "version") {
+        const vA = a.latest_version ?? 0;
+        const vB = b.latest_version ?? 0;
+        cmp = vA - vB;
+      } else if (sortField === "review_date") {
+        const tA = a.review_date ? new Date(a.review_date).getTime() : 0;
+        const tB = b.review_date ? new Date(b.review_date).getTime() : 0;
+        cmp = tA - tB;
+      }
+      return sortOrder === "asc" ? cmp : -cmp;
+    });
+
+    return result;
+  }, [docs, search, statusFilter, visibilityFilter, companyFilter, departmentFilter, sortField, sortOrder]);
 
   const statusOptions = useMemo(
     () => Array.from(new Set(docs.map((d) => d.latest_status ?? d.status))).sort(),
     [docs]
   );
+
+  const companyOptions = useMemo(
+    () => Array.from(new Set(docs.map((d) => d.company_name).filter(Boolean) as string[])).sort(),
+    [docs]
+  );
+
+  const departmentOptions = useMemo(
+    () => Array.from(new Set(docs.map((d) => d.department_name).filter(Boolean) as string[])).sort(),
+    [docs]
+  );
+
+  function handleSort(field: "title" | "version" | "review_date") {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  }
+
+  function renderSortHeader(field: "title" | "version" | "review_date", label: string) {
+    const isActive = sortField === field;
+    return (
+      <button
+        type="button"
+        onClick={() => handleSort(field)}
+        className="inline-flex items-center gap-1.5 font-medium text-ink-600 hover:text-ink-950 transition-colors cursor-pointer group"
+      >
+        <span>{label}</span>
+        {isActive ? (
+          sortOrder === "asc" ? (
+            <ArrowUp size={14} className="text-lime-700" />
+          ) : (
+            <ArrowDown size={14} className="text-lime-700" />
+          )
+        ) : (
+          <ArrowUpDown size={14} className="text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+        )}
+      </button>
+    );
+  }
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -155,13 +252,9 @@ export default function DocumentsPage() {
         setError(errMsg || "Erreur lors de l'upload.");
       }
     } else {
-      // Deliberately NOT auto-published here: upload only runs
-      // extraction/chunking/embeddings (status becomes "ready" on
-      // success). Publication is a separate, explicit action — see
-      // handlePublish — so a reviewer always sees new content before
-      // it becomes visible to chat/retrieval.
       setShowModal(false);
       setForm({ title: "", description: "", visibility: "company", departmentId: "", reviewDate: "", file: null });
+      showToast("Document uploadé avec succès !", "success");
       fetchDocs();
     }
     setUploading(false);
@@ -173,8 +266,9 @@ export default function DocumentsPage() {
     const res = await fetch(`/api/documents/${versionId}/publish`, { method: "POST" });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}) as { error?: string });
-      setError(data.error ?? "Erreur lors de la publication.");
+      showToast(data.error ?? "Erreur lors de la publication.", "error");
     } else {
+      showToast("Document publié et actif dans le RAG !", "success");
       fetchDocs();
     }
     setPublishingId(null);
@@ -183,13 +277,20 @@ export default function DocumentsPage() {
   async function handleRetry(versionId: string) {
     setRetryingId(versionId);
     setError(null);
-    const res = await fetch(`/api/documents/${versionId}/retry`, { method: "POST" });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}) as { error?: string });
-      setError(data.error ?? "Erreur lors de la réindexation.");
+    try {
+      const res = await fetch(`/api/documents/${versionId}/retry`, { method: "POST" });
+      const json = await res.json().catch(() => ({}) as { error?: string });
+      if (!res.ok) {
+        showToast(json.error ?? "Erreur lors de la réindexation.", "error");
+      } else {
+        showToast("Réindexation effectuée avec succès !", "success");
+        await fetchDocs();
+      }
+    } catch {
+      showToast("Erreur réseau lors de la réindexation.", "error");
+    } finally {
+      setRetryingId(null);
     }
-    fetchDocs();
-    setRetryingId(null);
   }
 
   async function handleDelete(versionId: string, title: string) {
@@ -198,55 +299,94 @@ export default function DocumentsPage() {
 
   async function confirmAndDelete() {
     if (!confirmDelete) return;
-    const { versionId } = confirmDelete;
+    const { versionId, title } = confirmDelete;
     setConfirmDelete(null);
     setDeletingId(versionId);
     setError(null);
-    const res = await fetch(`/api/documents/${versionId}/delete`, { method: "POST" });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}) as { error?: string });
-      setError(data.error ?? "Erreur lors de la suppression.");
+    try {
+      const res = await fetch(`/api/documents/${versionId}/delete`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}) as { error?: string });
+        showToast(data.error ?? "Erreur lors de la suppression.", "error");
+      } else {
+        showToast(`Document « ${title} » supprimé.`, "success");
+        await fetchDocs();
+      }
+    } catch {
+      showToast("Erreur réseau.", "error");
+    } finally {
+      setDeletingId(null);
     }
-    fetchDocs();
-    setDeletingId(null);
   }
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
+      {/* Toast feedback */}
+      {toast && (
+        <div
+          className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl border shadow-lg text-sm font-medium transition-all animate-in fade-in slide-in-from-top-3 ${
+            toast.type === "success"
+              ? "bg-white text-emerald-900 border-emerald-200 shadow-emerald-500/10"
+              : "bg-white text-red-900 border-red-200 shadow-red-500/10"
+          }`}
+        >
+          {toast.type === "success" ? (
+            <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle size={18} className="text-red-600 shrink-0" />
+          )}
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-2 text-ink-400 hover:text-ink-700 cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-ink-950 tracking-tight">Bibliothèque de documents</h1>
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-ink-950 tracking-tight">
+            Bibliothèque de documents
+          </h1>
+          <p className="text-sm text-ink-500 mt-1">
+            Gestion du catalogue documentaire multi-sociétés, suivi d&apos;indexation et contrôle de publication.
+          </p>
+        </div>
         <button
           onClick={() => setShowModal(true)}
-          className="bg-ink-950 hover:bg-ink-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="bg-ink-950 hover:bg-ink-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer shadow-xs"
         >
           + Nouveau document
         </button>
       </div>
 
       {!loading && docs.length > 0 && (
-        <div className="flex flex-col gap-2 mb-4">
-          {/* Search — full width on mobile */}
+        <div className="flex flex-col gap-2.5 mb-5">
+          {/* Search — full width */}
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un document…"
-            className="w-full border border-ink-100 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400"
+            placeholder="Rechercher un document par titre ou description…"
+            className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs"
           />
-          {/* Filters row + counter */}
-          <div className="flex items-center gap-2">
+
+          {/* Filters row: Statut, Visibilité, Société, Service */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <CustomSelect
               id="status-filter"
-              className="flex-1"
               value={statusFilter}
               onChange={setStatusFilter}
               options={[
                 { value: "all", label: "Tous les statuts" },
-                ...statusOptions.map((s) => ({ value: s, label: s })),
+                ...statusOptions.map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s })),
               ]}
             />
             <CustomSelect
               id="visibility-filter"
-              className="flex-1"
               value={visibilityFilter}
               onChange={setVisibilityFilter}
               options={[
@@ -254,61 +394,100 @@ export default function DocumentsPage() {
                 ...Object.entries(VISIBILITY_LABELS).map(([value, label]) => ({ value, label })),
               ]}
             />
-            <span className="text-xs text-ink-300 whitespace-nowrap shrink-0">
-              {filteredDocs.length} doc{filteredDocs.length !== 1 ? "s" : ""}
+            <CustomSelect
+              id="company-filter"
+              value={companyFilter}
+              onChange={setCompanyFilter}
+              options={[
+                { value: "all", label: "Toutes sociétés" },
+                ...companyOptions.map((c) => ({ value: c, label: c })),
+              ]}
+            />
+            <CustomSelect
+              id="department-filter"
+              value={departmentFilter}
+              onChange={setDepartmentFilter}
+              options={[
+                { value: "all", label: "Tous les services" },
+                ...departmentOptions.map((d) => ({ value: d, label: d })),
+                { value: "none", label: "Sans service (Général)" },
+              ]}
+            />
+          </div>
+
+          {/* Results counter and reset */}
+          <div className="flex items-center justify-between text-xs text-ink-400 px-1 pt-0.5">
+            <span>
+              {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""} affiché{filteredDocs.length !== 1 ? "s" : ""}
             </span>
+            {(search || statusFilter !== "all" || visibilityFilter !== "all" || companyFilter !== "all" || departmentFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("all");
+                  setVisibilityFilter("all");
+                  setCompanyFilter("all");
+                  setDepartmentFilter("all");
+                }}
+                className="text-lime-700 hover:text-lime-900 font-medium hover:underline cursor-pointer"
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="text-center text-ink-300 py-20">Chargement…</div>
+        <div className="text-center text-ink-400 py-20">Chargement…</div>
       ) : docs.length === 0 ? (
-        <div className="text-center text-ink-300 py-20">Aucun document disponible.</div>
+        <div className="text-center text-ink-400 py-20">Aucun document disponible.</div>
       ) : filteredDocs.length === 0 ? (
-        <div className="text-center text-ink-300 py-20">Aucun document ne correspond à ces critères.</div>
+        <div className="text-center text-ink-400 py-20">Aucun document ne correspond à ces critères.</div>
       ) : (
         <>
           {/* ── Mobile cards (< md) ──────────────────────────────────────── */}
           <div className="md:hidden flex flex-col gap-3">
             {filteredDocs.map((doc) => {
-              const status = doc.latest_status ?? doc.status;
+              const statusKey = doc.latest_status ?? doc.status;
               const isOverdue =
                 doc.status === "published" &&
                 doc.review_date != null &&
                 new Date(doc.review_date) < new Date();
               return (
-                <div key={doc.id} className="bg-white rounded-2xl border border-ink-100 p-4">
-                  {/* Title + badges row */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
+                <div key={doc.id} className="bg-white rounded-2xl border border-ink-100 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-ink-950 truncate">{doc.title}</p>
+                      <p className="font-semibold text-ink-950 text-sm">{doc.title}</p>
                       {doc.description && (
-                        <p className="text-xs text-ink-300 truncate mt-0.5">{doc.description}</p>
+                        <p className="text-xs text-ink-400 truncate mt-0.5">{doc.description}</p>
                       )}
-                      {doc.latest_status === "failed" && doc.latest_error_message && (
-                        <p className="text-xs text-red-500 truncate mt-0.5" title={doc.latest_error_message}>
-                          {doc.latest_error_message}
-                        </p>
-                      )}
+                      <p className="text-xs text-ink-500 font-medium mt-1">
+                        {doc.company_name ?? "ZEN Knowledge"} · {doc.department_name ?? "Groupe"}
+                      </p>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] ?? "bg-ink-100 text-ink-500"}`}>
-                        {status}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"}`}>
+                        {STATUS_LABELS[statusKey] ?? statusKey}
                       </span>
-                      {VISIBILITY_COLORS[doc.visibility] ? (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility]}`}>
-                          {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-ink-400">{VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}</span>
-                      )}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"}`}>
+                        {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                      </span>
                     </div>
                   </div>
 
+                  {/* Error banner if failed */}
+                  {doc.latest_status === "failed" && doc.latest_error_message && (
+                    <div className="flex items-start gap-1.5 p-2 bg-red-50 text-red-700 rounded-lg text-xs border border-red-100">
+                      <AlertCircle size={14} className="shrink-0 text-red-600 mt-0.5" />
+                      <span>{doc.latest_error_message}</span>
+                    </div>
+                  )}
+
                   {/* Meta row */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-400 mb-3">
-                    <span>{doc.owner_email}</span>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-400">
+                    <span className="font-medium text-ink-700">{doc.owner_name || doc.owner_email}</span>
                     {doc.latest_version && (
                       <span>
                         v{doc.latest_version}
@@ -324,48 +503,56 @@ export default function DocumentsPage() {
                         }
                       >
                         {new Date(doc.review_date).toLocaleDateString("fr-FR")}
-                        {isOverdue && " · Révision dépassée"}
+                        {isOverdue && " · Dépassée"}
                       </span>
                     )}
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-3 border-t border-ink-50 pt-3">
+                  <div className="flex items-center gap-2 border-t border-ink-100 pt-3">
                     {doc.latest_status === "ready" && doc.latest_version_id ? (
                       <button
                         onClick={() => handlePublish(doc.latest_version_id!)}
                         disabled={publishingId === doc.latest_version_id}
-                        className="text-xs font-medium text-lime-600 hover:text-lime-800 disabled:opacity-50 transition-colors"
+                        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-lime-400 text-ink-950 hover:bg-lime-500 disabled:opacity-50 transition-colors"
                       >
                         {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
                       </button>
-                    ) : doc.latest_status === "failed" && doc.latest_version_id ? (
+                    ) : null}
+
+                    {doc.latest_version_id && (
                       <button
                         onClick={() => handleRetry(doc.latest_version_id!)}
                         disabled={retryingId === doc.latest_version_id}
-                        className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+                        className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
+                          doc.latest_status === "failed"
+                            ? "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                            : "text-ink-600 hover:bg-paper-100"
+                        }`}
                       >
-                        {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
+                        <RefreshCw size={12} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
+                        <span>{retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}</span>
                       </button>
-                    ) : doc.latest_version_id ? (
+                    )}
+
+                    {doc.latest_version_id && (
                       <a
                         href={`/documents/${doc.latest_version_id}/preview`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-ink-600 hover:text-lime-700 transition-colors px-2 py-1.5"
                       >
                         Voir <ExternalLink size={12} strokeWidth={2} />
                       </a>
-                    ) : (
-                      <span className="text-xs text-ink-300">—</span>
                     )}
+
                     {doc.latest_version_id && (
                       <button
                         onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
                         disabled={deletingId === doc.latest_version_id}
-                        className="text-xs font-medium text-ink-300 hover:text-red-600 disabled:opacity-50 transition-colors ml-auto"
+                        className="text-xs font-medium text-ink-400 hover:text-red-600 disabled:opacity-50 transition-colors ml-auto p-1.5"
                       >
-                        {deletingId === doc.latest_version_id ? "…" : "Supprimer"}
+                        <Trash2 size={14} />
                       </button>
                     )}
                   </div>
@@ -375,125 +562,197 @@ export default function DocumentsPage() {
           </div>
 
           {/* ── Desktop table (md+) ────────────────────────────────────── */}
-          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-hidden">
+          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-paper-100 border-b border-ink-100">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-ink-500">Titre</th>
-                  <th className="text-left px-4 py-3 font-medium text-ink-500">Visibilité</th>
-                  <th className="text-left px-4 py-3 font-medium text-ink-500">Statut</th>
-                  <th className="text-left px-4 py-3 font-medium text-ink-500">Version</th>
-                  <th className="text-left px-4 py-3 font-medium text-ink-500">Propriétaire</th>
-                  <th className="text-left px-4 py-3 font-medium text-ink-500">Révision</th>
-                  <th className="text-left px-4 py-3 font-medium text-ink-500">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-100">
-                {filteredDocs.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-paper-100 transition-colors">
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-ink-950">{doc.title}</p>
-                      {doc.description && (
-                        <p className="text-xs text-ink-300 truncate max-w-xs">{doc.description}</p>
-                      )}
-                      {doc.latest_status === "failed" && doc.latest_error_message && (
-                        <p className="text-xs text-red-500 truncate max-w-xs" title={doc.latest_error_message}>
-                          {doc.latest_error_message}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {VISIBILITY_COLORS[doc.visibility] ? (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility]}`}>
-                          {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
-                        </span>
-                      ) : (
-                        <span className="text-ink-500">{VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[doc.latest_status ?? doc.status] ?? "bg-ink-100 text-ink-500"}`}>
-                        {doc.latest_status ?? doc.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-ink-500">
-                      {doc.latest_version ? `v${doc.latest_version}` : "—"}
-                      {doc.version_count > 1 && (
-                        <span className="text-xs text-ink-300 ml-1">({doc.version_count} versions)</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
-                    <td className="px-4 py-3 text-xs">
-                      {doc.review_date ? (
-                        <span
-                          className={
-                            doc.status === "published" && new Date(doc.review_date) < new Date()
-                              ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
-                              : "text-ink-500"
-                          }
-                          title={
-                            doc.status === "published" && new Date(doc.review_date) < new Date()
-                              ? "Date de révision dépassée — voir W3 (obsolescence)"
-                              : undefined
-                          }
-                        >
-                          {new Date(doc.review_date).toLocaleDateString("fr-FR")}
-                          {doc.status === "published" && new Date(doc.review_date) < new Date() && " · Révision dépassée"}
-                        </span>
-                      ) : (
-                        <span className="text-ink-500">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        {doc.latest_status === "ready" && doc.latest_version_id ? (
-                          <button
-                            onClick={() => handlePublish(doc.latest_version_id!)}
-                            disabled={publishingId === doc.latest_version_id}
-                            className="text-xs font-medium text-lime-600 hover:text-lime-800 disabled:opacity-50 transition-colors"
-                            title="Rend cette version visible dans le chat (recherche RAG)"
-                          >
-                            {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
-                          </button>
-                        ) : doc.latest_status === "failed" && doc.latest_version_id ? (
-                          <button
-                            onClick={() => handleRetry(doc.latest_version_id!)}
-                            disabled={retryingId === doc.latest_version_id}
-                            className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
-                            title="Relance l'extraction/l'indexation à partir du même fichier"
-                          >
-                            {retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}
-                          </button>
-                        ) : doc.latest_version_id ? (
-                          <a
-                            href={`/documents/${doc.latest_version_id}/preview`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors"
-                            title="Voir le document"
-                          >
-                            Voir <ExternalLink size={12} strokeWidth={2} />
-                          </a>
-                        ) : (
-                          <span className="text-xs text-ink-300">—</span>
-                        )}
-                        {doc.latest_version_id && (
-                          <button
-                            onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
-                            disabled={deletingId === doc.latest_version_id}
-                            className="text-xs font-medium text-ink-300 hover:text-red-600 disabled:opacity-50 transition-colors"
-                            title="Supprimer ce document"
-                          >
-                            {deletingId === doc.latest_version_id ? "…" : "Supprimer"}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+              <table className="w-full text-sm">
+                <thead className="bg-paper-100 border-b border-ink-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      {renderSortHeader("title", "Titre")}
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      Société · Service
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      Visibilité
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      Statut
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      {renderSortHeader("version", "Version")}
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      Propriétaire
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      {renderSortHeader("review_date", "Révision")}
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-ink-500">
+                      Action
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {filteredDocs.map((doc) => {
+                    const statusKey = doc.latest_status ?? doc.status;
+                    const isOverdue =
+                      doc.status === "published" &&
+                      doc.review_date != null &&
+                      new Date(doc.review_date) < new Date();
+
+                    return (
+                      <tr key={doc.id} className="hover:bg-paper-50 transition-colors">
+                        {/* Titre */}
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-ink-950">{doc.title}</p>
+                          {doc.description && (
+                            <p className="text-xs text-ink-400 truncate max-w-xs">{doc.description}</p>
+                          )}
+                        </td>
+
+                        {/* Société · Service */}
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-ink-900 text-xs">
+                              {doc.company_name ?? "—"}
+                            </span>
+                            <span className="text-[11px] text-ink-500">
+                              {doc.department_name ?? "Groupe (Général)"}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Visibilité */}
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"
+                            }`}
+                          >
+                            {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                          </span>
+                        </td>
+
+                        {/* Statut & Erreur */}
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"
+                              }`}
+                            >
+                              {STATUS_LABELS[statusKey] ?? statusKey}
+                            </span>
+                            {doc.latest_status === "failed" && doc.latest_error_message && (
+                              <div
+                                className="flex items-center gap-1 text-[11px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 max-w-[180px]"
+                                title={doc.latest_error_message}
+                              >
+                                <AlertCircle size={11} className="shrink-0 text-red-500" />
+                                <span className="truncate">{doc.latest_error_message}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Version */}
+                        <td className="px-4 py-3 text-ink-600">
+                          {doc.latest_version ? `v${doc.latest_version}` : "—"}
+                          {doc.version_count > 1 && (
+                            <span className="text-xs text-ink-400 ml-1">({doc.version_count} v.)</span>
+                          )}
+                        </td>
+
+                        {/* Propriétaire */}
+                        <td className="px-4 py-3 text-xs">
+                          <div className="font-medium text-ink-900">{doc.owner_name || doc.owner_email}</div>
+                          {doc.owner_name && doc.owner_name !== doc.owner_email && (
+                            <div className="text-[11px] text-ink-400 truncate max-w-[130px]" title={doc.owner_email}>
+                              {doc.owner_email}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Date de révision */}
+                        <td className="px-4 py-3 text-xs">
+                          {doc.review_date ? (
+                            <span
+                              className={
+                                isOverdue
+                                  ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
+                                  : "text-ink-600"
+                              }
+                              title={isOverdue ? "Date de révision dépassée — voir W3 (obsolescence)" : undefined}
+                            >
+                              {new Date(doc.review_date).toLocaleDateString("fr-FR")}
+                              {isOverdue && " · Dépassée"}
+                            </span>
+                          ) : (
+                            <span className="text-ink-400">—</span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {doc.latest_status === "ready" && doc.latest_version_id && (
+                              <button
+                                onClick={() => handlePublish(doc.latest_version_id!)}
+                                disabled={publishingId === doc.latest_version_id}
+                                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-lime-400 text-ink-950 hover:bg-lime-500 disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
+                                title="Publier ce document dans l'assistant RAG"
+                              >
+                                {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
+                              </button>
+                            )}
+
+                            {doc.latest_version_id && (
+                              <button
+                                onClick={() => handleRetry(doc.latest_version_id!)}
+                                disabled={retryingId === doc.latest_version_id}
+                                className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                                  doc.latest_status === "failed"
+                                    ? "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 shadow-2xs"
+                                    : "text-ink-600 hover:bg-paper-100 hover:text-ink-950"
+                                }`}
+                                title={doc.latest_status === "failed" ? "Relancer l'ingestion" : "Réindexer ce document"}
+                              >
+                                <RefreshCw size={12} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
+                                <span>{retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}</span>
+                              </button>
+                            )}
+
+                            {doc.latest_version_id && (
+                              <a
+                                href={`/documents/${doc.latest_version_id}/preview`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 text-ink-500 hover:text-lime-700 transition-colors rounded-lg hover:bg-paper-100"
+                                title="Voir le document"
+                              >
+                                <span>Voir</span>
+                                <ExternalLink size={12} strokeWidth={2} />
+                              </a>
+                            )}
+
+                            {doc.latest_version_id && (
+                              <button
+                                onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
+                                disabled={deletingId === doc.latest_version_id}
+                                className="p-1.5 text-ink-300 hover:text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors cursor-pointer"
+                                title="Supprimer ce document"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </>
@@ -502,16 +761,17 @@ export default function DocumentsPage() {
       {/* Delete Confirmation Modal */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-ink-100">
             <div className="flex flex-col items-center text-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-                <Trash2 size={20} className="text-red-600" strokeWidth={2} />
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0 text-red-600">
+                <Trash2 size={22} strokeWidth={2} />
               </div>
               <div>
-                <h2 className="font-semibold text-ink-950 text-base mb-1">Supprimer ce document ?</h2>
-                <p className="text-sm text-ink-500">
-                  <span className="font-medium text-ink-900">« {confirmDelete.title} »</span> ne sera plus
-                  accessible dans le chat ni la bibliothèque. Cette action est irréversible.
+                <h2 className="font-semibold text-ink-950 text-base mb-1.5">
+                  Supprimer « {confirmDelete.title} » ?
+                </h2>
+                <p className="text-sm text-ink-500 leading-relaxed">
+                  Cette action est irréversible. Le document et ses versions seront immédiatement retirés de la bibliothèque et exclus du chat/RAG.
                 </p>
               </div>
             </div>
@@ -519,14 +779,14 @@ export default function DocumentsPage() {
               <button
                 type="button"
                 onClick={() => setConfirmDelete(null)}
-                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors"
+                className="flex-1 border border-ink-100 rounded-xl py-2 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer"
               >
                 Annuler
               </button>
               <button
                 type="button"
                 onClick={confirmAndDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2 text-sm font-medium transition-colors cursor-pointer shadow-xs"
               >
                 Supprimer
               </button>
