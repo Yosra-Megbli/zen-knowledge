@@ -139,7 +139,11 @@ export async function ingestDocument(input: IngestDocumentInput): Promise<Ingest
       }
 
       // Déduplication version : vérifie si le fichier téléversé est identique à la version actuelle
-      if (docRes.rows[0].current_version_id) {
+      if (
+        docRes.rows[0].current_version_id &&
+        !triggeredBy.startsWith("retry:") &&
+        !triggeredBy.startsWith("reindex:")
+      ) {
         const curVerRes = await client.query<{ file_key: string }>(
           `SELECT file_key FROM document_versions WHERE id = $1`,
           [docRes.rows[0].current_version_id]

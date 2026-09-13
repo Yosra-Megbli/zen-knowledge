@@ -13,7 +13,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ve
 
   try {
     const result = await retryFailedVersion(ctx, versionId, `retry:${ctx.userId}`);
-    return NextResponse.json(result, { status: result.status === "completed" ? 201 : 422 });
+    if (result.status === "failed") {
+      return NextResponse.json(
+        { error: result.errorMessage ?? "Échec lors de la réindexation.", ...result },
+        { status: 422 }
+      );
+    }
+    return NextResponse.json(result, { status: 201 });
   } catch (err) {
     if (err instanceof IngestionForbiddenError) {
       return NextResponse.json({ error: err.message }, { status: 403 });

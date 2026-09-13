@@ -298,9 +298,10 @@ export default function DocumentsPage() {
     setError(null);
     try {
       const res = await fetch(`/api/documents/${versionId}/retry`, { method: "POST" });
-      const json = await res.json().catch(() => ({}) as { error?: string });
+      const json = await res.json().catch(() => ({}) as { error?: string; errorMessage?: string; message?: string });
       if (!res.ok) {
-        showToast(json.error ?? "Erreur lors de la réindexation.", "error");
+        const errorMsg = json.error || json.errorMessage || json.message || "Erreur lors de la réindexation.";
+        showToast(errorMsg, "error");
       } else {
         showToast("Réindexation effectuée avec succès !", "success");
         await fetchDocs();
@@ -571,9 +572,16 @@ export default function DocumentsPage() {
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"}`}>
-                        {STATUS_LABELS[statusKey] ?? statusKey}
-                      </span>
+                      {retryingId === doc.latest_version_id ? (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 animate-pulse flex items-center gap-1">
+                          <RefreshCw size={11} className="animate-spin" />
+                          <span>Indexation…</span>
+                        </span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"}`}>
+                          {STATUS_LABELS[statusKey] ?? statusKey}
+                        </span>
+                      )}
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"}`}>
                         {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
                       </span>
@@ -638,10 +646,15 @@ export default function DocumentsPage() {
 
                     {doc.latest_version_id && (
                       <button
-                        onClick={() => handleRetry(doc.latest_version_id!)}
-                        disabled={retryingId === doc.latest_version_id}
-                        className="p-1.5 text-ink-600 hover:bg-paper-100 rounded-lg cursor-pointer"
-                        title="Réindexer"
+                        type="button"
+                        onClick={() => !isArchived && handleRetry(doc.latest_version_id!)}
+                        disabled={isArchived || retryingId === doc.latest_version_id}
+                        className={`p-1.5 rounded-lg ${
+                          isArchived
+                            ? "text-ink-300 opacity-40 cursor-not-allowed"
+                            : "text-ink-600 hover:bg-paper-100 cursor-pointer"
+                        }`}
+                        title={isArchived ? "Réactivez le document pour le réindexer" : "Réindexer"}
                       >
                         <RefreshCw size={14} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
                       </button>
@@ -782,14 +795,21 @@ export default function DocumentsPage() {
                       {/* Statut & Erreur */}
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"
-                            }`}
-                          >
-                            {STATUS_LABELS[statusKey] ?? statusKey}
-                          </span>
-                          {doc.latest_status === "failed" && doc.latest_error_message && (
+                          {retryingId === doc.latest_version_id ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 animate-pulse flex items-center gap-1">
+                              <RefreshCw size={11} className="animate-spin" />
+                              <span>Indexation…</span>
+                            </span>
+                          ) : (
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"
+                              }`}
+                            >
+                              {STATUS_LABELS[statusKey] ?? statusKey}
+                            </span>
+                          )}
+                          {doc.latest_status === "failed" && doc.latest_error_message && retryingId !== doc.latest_version_id && (
                             <div
                               className="flex items-center gap-1 text-[11px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 max-w-[140px]"
                               title={doc.latest_error_message}
@@ -870,14 +890,18 @@ export default function DocumentsPage() {
                             </button>
                           )}
 
-                          {/* Réindexer icône si statut ≠ Publié */}
+                          {/* Réindexer icône si statut = failed */}
                           {doc.latest_status === "failed" && doc.latest_version_id && (
                             <button
                               type="button"
-                              onClick={() => handleRetry(doc.latest_version_id!)}
-                              disabled={retryingId === doc.latest_version_id}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-colors cursor-pointer"
-                              title="Réindexer ce document"
+                              onClick={() => !isArchived && handleRetry(doc.latest_version_id!)}
+                              disabled={isArchived || retryingId === doc.latest_version_id}
+                              className={`p-1.5 rounded-lg border transition-colors ${
+                                isArchived
+                                  ? "text-ink-300 border-ink-100 opacity-40 cursor-not-allowed"
+                                  : "text-red-600 hover:bg-red-50 border-red-200 cursor-pointer"
+                              }`}
+                              title={isArchived ? "Réactivez le document pour le réindexer" : "Réindexer ce document"}
                             >
                               <RefreshCw
                                 size={14}
@@ -920,11 +944,19 @@ export default function DocumentsPage() {
                                     type="button"
                                     onClick={() => {
                                       setKebabOpenId(null);
-                                      handleRetry(doc.latest_version_id!);
+                                      if (!isArchived) {
+                                        handleRetry(doc.latest_version_id!);
+                                      }
                                     }}
-                                    className="w-full px-3 py-1.5 text-left text-xs text-ink-700 hover:bg-paper-100 flex items-center gap-2 cursor-pointer"
+                                    disabled={isArchived || retryingId === doc.latest_version_id}
+                                    className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${
+                                      isArchived
+                                        ? "text-ink-300 opacity-50 cursor-not-allowed"
+                                        : "text-ink-700 hover:bg-paper-100 cursor-pointer"
+                                    }`}
+                                    title={isArchived ? "Réactivez le document pour le réindexer" : "Réindexer"}
                                   >
-                                    <RefreshCw size={12} />
+                                    <RefreshCw size={12} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
                                     <span>Réindexer</span>
                                   </button>
                                   {doc.status === "published" && (
