@@ -27,19 +27,19 @@ test("simulated DB outage / failure during pipeline: produces DATABASE_FAILURE e
   const originalConnect = anyPool.connect.bind(anyPool);
 
   let connectCount = 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  anyPool.connect = async function (...args: any[]) {
+  const touchedClients: Array<{ client: { query: unknown }; originalQuery: unknown }> = [];
+  anyPool.connect = async function (...args: unknown[]) {
     connectCount++;
     const client = await originalConnect(...args);
     if (connectCount >= 3) {
       const originalQuery = client.query.bind(client);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      client.query = async function (...qArgs: any[]) {
+      touchedClients.push({ client, originalQuery });
+      client.query = async function (...qArgs: unknown[]) {
         const sql = typeof qArgs[0] === "string" ? qArgs[0] : (qArgs[0] as { text?: string })?.text ?? "";
         if (sql.includes("document_chunks") || sql.includes("INSERT")) {
+          client.query = originalQuery; // immediately restore
           const err = new Error("connection terminated unexpectedly: server closed the connection unexpectedly");
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (err as any).code = "57P01";
+          Object.assign(err, { code: "57P01" });
           throw err;
         }
         return originalQuery(...qArgs);
@@ -64,7 +64,10 @@ test("simulated DB outage / failure during pipeline: produces DATABASE_FAILURE e
     assert.ok(!JSON.stringify(result).includes("postgresql://"));
     assert.ok(!JSON.stringify(result).includes("postgres:"));
   } finally {
-    // Restore original pool method
+    // Restore original pool method and any patched clients
     anyPool.connect = originalConnect;
+    for (const { client, originalQuery } of touchedClients) {
+      client.query = originalQuery;
+    }
   }
 });

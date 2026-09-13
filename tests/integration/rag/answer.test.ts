@@ -355,7 +355,7 @@ test("P — LLM rate limit error propagates as LlmError, not a raw provider erro
   setLlmProvider(makeErrorProvider("RATE_LIMIT"));
 
   await assert.rejects(
-    () => answerQuestion(ctx("Acme Corp", "admin"), "onboarding"),
+    () => answerQuestion(ctx("Acme Corp", "admin"), "Comment se passe l'onboarding ?"),
     (err: unknown) => err instanceof LlmError && (err as LlmError).code === "RATE_LIMIT"
   );
 });
@@ -364,7 +364,7 @@ test("P — LLM timeout error propagates as LlmError", async () => {
   setLlmProvider(makeErrorProvider("TIMEOUT"));
 
   await assert.rejects(
-    () => answerQuestion(ctx("Acme Corp", "admin"), "onboarding"),
+    () => answerQuestion(ctx("Acme Corp", "admin"), "Comment se passe l'onboarding ?"),
     (err: unknown) => err instanceof LlmError && (err as LlmError).code === "TIMEOUT"
   );
 });

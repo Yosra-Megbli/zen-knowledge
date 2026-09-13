@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Download } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Download, RefreshCw } from "lucide-react";
 
 interface ActivityRow {
   action: string;
@@ -77,30 +77,46 @@ export default function AdminPage() {
   const [refusalsOpen, setRefusalsOpen] = useState(true);
   const [overdueOpen, setOverdueOpen] = useState(true);
   const [activityPage, setActivityPage] = useState(1);
-  // Separate from the initial full-page `loading` gate — paging
-  // through activity shouldn't blank out the KPI cards that already
-  // loaded, just show a brief disabled state on the table itself.
   const [activityLoading, setActivityLoading] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const isFirstLoad = activityPage === 1 && !stats;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isFirstLoad) setLoading(true);
     else setActivityLoading(true);
+    setError(null);
 
     fetch(`/api/admin/stats?page=${activityPage}`)
-      .then((r) => r.ok ? r.json() : r.json().then((d: { error: string }) => Promise.reject(d.error)))
+      .then((r) => r.ok ? r.json() : r.json().then((d: { error?: string; details?: string }) => Promise.reject(d.error || d.details || "Erreur serveur")))
       .then(setStats)
-      .catch((e: string) => setError(typeof e === "string" ? e : "Erreur"))
+      .catch((e: unknown) => setError(typeof e === "string" ? e : "Erreur lors du chargement des statistiques."))
       .finally(() => {
         setLoading(false);
         setActivityLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activityPage]);
+  }, [activityPage, retryKey]);
 
   if (loading) return <div className="text-center text-ink-300 py-20">Chargement…</div>;
-  if (error) return <div className="text-center text-red-500 py-20">{error}</div>;
+  if (error) {
+    return (
+      <div className="max-w-md mx-auto my-20 p-6 rounded-2xl bg-white border border-red-200 shadow-sm text-center">
+        <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle size={24} />
+        </div>
+        <h3 className="text-base font-semibold text-ink-900 mb-1">Impossible de charger le tableau de bord</h3>
+        <p className="text-sm text-ink-500 mb-6">{error}</p>
+        <button
+          onClick={() => setRetryKey((k) => k + 1)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-lime-700 hover:bg-lime-800 rounded-lg transition-colors cursor-pointer"
+        >
+          <RefreshCw size={16} />
+          Réessayer
+        </button>
+      </div>
+    );
+  }
   if (!stats) return null;
 
   const { companyName, totals, estimatedCostUsd, feedback, refusals, recent, overdueDocuments } = stats;
