@@ -833,14 +833,14 @@ export default function DocumentsPage() {
           <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-visible shadow-2xs">
             <table className="w-full text-sm table-fixed">
               <colgroup>
-                <col className="w-[27%]" />
-                <col className="w-[17%]" />
-                <col className="w-[10%]" />
-                <col className="w-[12%]" />
-                <col className="w-[7%]" />
-                <col className="w-[11%]" />
+                <col className="w-[23%]" />
+                <col className="w-[14%]" />
                 <col className="w-[9%]" />
-                <col className="w-[7%]" />
+                <col className="w-[11%]" />
+                <col className="w-[5%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+                <col className="w-[8%]" />
               </colgroup>
               <thead className="sticky top-0 bg-paper-100/95 backdrop-blur-xs border-b border-ink-100 z-10 shadow-2xs">
                 <tr>
@@ -989,7 +989,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Action (icônes standardisées avec menu kebab ⋯ parfaitement aligné) */}
-                      <td className="px-3 py-2.5 text-right relative">
+                      <td className="px-3 py-2.5 text-right relative whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-1">
                           {/* Voir le document (toujours présent dans toutes les lignes) */}
                           {doc.latest_version_id && (

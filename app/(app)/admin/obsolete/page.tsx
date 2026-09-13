@@ -5,16 +5,21 @@ import Link from "next/link";
 import {
   ArrowLeft,
   AlertTriangle,
+  AlertCircle,
   Clock,
   ExternalLink,
   RefreshCw,
   CheckCircle2,
+  Check,
   Bell,
   Send,
   EyeOff,
   Eye,
   X,
   ShieldAlert,
+  ShieldCheck,
+  Flame,
+  Loader2,
 } from "lucide-react";
 
 export interface ObsoleteDoc {
@@ -70,6 +75,152 @@ function daysLabel(days: number, status: "overdue" | "approaching" | "unpublishe
   return `Dans ${daysUntil} jours`;
 }
 
+function getOverdueBadgeClass(days: number, status: "overdue" | "approaching" | "unpublished"): string {
+  if (status === "unpublished") {
+    return "bg-zinc-100 text-zinc-700 border border-zinc-200 font-medium";
+  }
+  if (status === "approaching") {
+    return "bg-sky-50 text-sky-700 border border-sky-200 font-medium";
+  }
+  // 3 visual urgency tiers
+  if (days > 90) {
+    return "bg-red-600 text-white font-semibold shadow-xs";
+  }
+  if (days >= 30) {
+    return "bg-amber-500 text-white font-semibold shadow-xs";
+  }
+  return "bg-amber-100 text-amber-800 border border-amber-300 font-medium";
+}
+
+/* ── ÉTAPE 1 : Stepper W3 par carte ── */
+function W3Stepper({ doc }: { doc: ObsoleteDoc }) {
+  const isUnpublished = doc.status === "unpublished";
+  const isNotified = Boolean(doc.rt_notified_at);
+  const reminderCount = doc.reminder_count ?? (doc.rt_reminded_at ? 1 : 0);
+
+  const steps = [
+    {
+      id: "detected",
+      label: "Détecté",
+      icon: AlertCircle,
+      status: isNotified || reminderCount > 0 || isUnpublished ? "completed" : "current",
+      tooltip: `Détecté en retard de révision depuis le ${new Date(doc.review_date).toLocaleDateString("fr-FR")}`,
+      date: new Date(doc.review_date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }),
+    },
+    {
+      id: "notified",
+      label: "Notifié",
+      icon: Bell,
+      status: !isNotified
+        ? "upcoming"
+        : reminderCount > 0 || isUnpublished
+        ? "completed"
+        : "current",
+      tooltip: isNotified
+        ? `Notifié le ${new Date(doc.rt_notified_at!).toLocaleDateString("fr-FR")}`
+        : "En attente de notification au propriétaire",
+      date: isNotified
+        ? new Date(doc.rt_notified_at!).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
+        : null,
+    },
+    {
+      id: "reminded",
+      label: reminderCount > 0 ? `Relancé (${reminderCount}×)` : "Relancé",
+      icon: Send,
+      status: reminderCount === 0
+        ? "upcoming"
+        : isUnpublished
+        ? "completed"
+        : "current",
+      tooltip: reminderCount > 0
+        ? `Relancé ${reminderCount} fois${doc.rt_reminded_at ? ` (dernière le ${new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")})` : ""}`
+        : "Aucune relance envoyée pour le moment",
+      date: doc.rt_reminded_at
+        ? new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
+        : null,
+    },
+    {
+      id: "unpublished",
+      label: "Dépublié",
+      icon: EyeOff,
+      status: isUnpublished ? "current" : "upcoming",
+      tooltip: isUnpublished
+        ? "Document dépublié : exclu de l'assistant de chat RAG"
+        : "Dépublication si le document n'est pas révisé",
+      date: null,
+    },
+  ];
+
+  return (
+    <div className="w-full bg-paper-50/80 rounded-xl p-2.5 border border-ink-100/70 mb-3">
+      <div className="flex items-center justify-between relative">
+        {steps.map((step, idx) => {
+          const Icon = step.icon;
+          const isCompleted = step.status === "completed";
+          const isCurrent = step.status === "current";
+
+          return (
+            <div
+              key={step.id}
+              className="flex-1 flex flex-col items-center relative group"
+              title={step.tooltip}
+            >
+              {/* Connecting line */}
+              {idx > 0 && (
+                <div
+                  className={`absolute top-3.5 -left-1/2 w-full h-0.5 -z-0 transition-colors duration-300 ${
+                    isCompleted || isCurrent ? "bg-lime-500" : "bg-ink-200"
+                  }`}
+                />
+              )}
+
+              {/* Node bubble */}
+              <div
+                className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 shadow-xs ${
+                  isCompleted
+                    ? "bg-ink-950 text-lime-400 border border-ink-900"
+                    : isCurrent
+                    ? step.id === "unpublished"
+                      ? "bg-zinc-700 text-white ring-2 ring-zinc-400 ring-offset-1"
+                      : "bg-lime-400 text-ink-950 ring-2 ring-lime-400 ring-offset-1 font-bold"
+                    : "bg-paper-200 text-ink-400 border border-ink-200"
+                }`}
+              >
+                {isCompleted ? (
+                  <Check size={12} strokeWidth={2.5} />
+                ) : (
+                  <Icon size={12} strokeWidth={isCurrent ? 2.5 : 2} />
+                )}
+              </div>
+
+              {/* Step label & date */}
+              <div className="mt-1.5 text-center">
+                <span
+                  className={`block text-[11px] leading-tight transition-colors ${
+                    isCompleted
+                      ? "font-medium text-ink-900"
+                      : isCurrent
+                      ? "font-bold text-ink-950"
+                      : "text-ink-400"
+                  }`}
+                >
+                  <span className="hidden sm:inline">{step.label}</span>
+                  <span className="sm:hidden">{step.label.slice(0, 3)}.</span>
+                </span>
+                {step.date && (
+                  <span className="hidden sm:block text-[10px] text-ink-400 leading-none mt-0.5 font-mono">
+                    {step.date}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function DocCard({
   doc,
   onAction,
@@ -83,20 +234,14 @@ function DocCard({
   const isOverdue = doc.status === "overdue";
 
   const cardBorder = isUnpublished
-    ? "border-ink-100 bg-paper-50 opacity-90"
+    ? "border-ink-100 bg-paper-50 opacity-95"
     : isOverdue
-    ? doc.days_overdue >= 30
-      ? "border-red-200 bg-red-50/40"
-      : "border-amber-200 bg-amber-50/40"
+    ? doc.days_overdue >= 90
+      ? "border-red-300 bg-red-50/40"
+      : doc.days_overdue >= 30
+      ? "border-amber-300 bg-amber-50/40"
+      : "border-ink-100 bg-white"
     : "border-ink-100 bg-white";
-
-  const daysBadge = isUnpublished
-    ? "bg-ink-100 text-ink-600 border border-ink-200"
-    : isOverdue
-    ? doc.days_overdue >= 30
-      ? "bg-red-100 text-red-700"
-      : "bg-amber-100 text-amber-700"
-    : "bg-sky-100 text-sky-700";
 
   const reminderCount = doc.reminder_count ?? (doc.rt_reminded_at ? 1 : 0);
   const isNotified = Boolean(doc.rt_notified_at);
@@ -114,13 +259,37 @@ function DocCard({
               <p className="text-xs text-ink-500 truncate mt-0.5">{doc.description}</p>
             )}
           </div>
-          <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-semibold ${daysBadge}`}>
+          <span
+            className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs ${getOverdueBadgeClass(
+              doc.days_overdue,
+              doc.status
+            )}`}
+          >
             {daysLabel(doc.days_overdue, doc.status)}
           </span>
         </div>
 
+        {/* ÉTAPE 2 : Mini-barre de vieillissement (pour les documents en retard) */}
+        {isOverdue && (
+          <div
+            className="w-full mt-1 mb-3"
+            title={`Ancienneté de dépassement : ${doc.days_overdue} jours`}
+          >
+            <div className="flex items-center justify-between text-[11px] text-ink-400 mb-1">
+              <span>Vieillissement du document</span>
+              <span className="font-medium text-ink-600">{doc.days_overdue} j. / 90 j. max</span>
+            </div>
+            <div className="h-1.5 w-full bg-paper-200 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-lime-400 via-amber-400 to-red-500"
+                style={{ width: `${Math.min(100, Math.max(8, Math.round((doc.days_overdue / 90) * 100)))}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Metadata info */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-400 mb-3">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-500 mb-3">
           <span>
             <span className="font-medium text-ink-700">Date de révision : </span>
             {new Date(doc.review_date).toLocaleDateString("fr-FR")}
@@ -137,48 +306,48 @@ function DocCard({
           )}
         </div>
 
-        {/* W3 Workflow state tracker badge */}
+        {/* ÉTAPE 1 : Stepper W3 par carte (affiché sur overdue et unpublished) */}
+        {(isOverdue || isUnpublished) && <W3Stepper doc={doc} />}
+
+        {/* ÉTAPE 3 : Traçabilité visible */}
+        {isNotified && !isUnpublished && (
+          <div className="flex items-center gap-1.5 text-xs text-ink-500 mb-3 bg-paper-50 px-2.5 py-1.5 rounded-lg border border-ink-100/60">
+            <Clock size={13} className="text-ink-400 shrink-0" />
+            <span>
+              Notifié le {new Date(doc.rt_notified_at!).toLocaleDateString("fr-FR")}
+              {reminderCount > 0 && (
+                <>
+                  {" · "}
+                  <strong className="text-ink-800 font-medium">
+                    {reminderCount} relance{reminderCount > 1 ? "s" : ""}
+                  </strong>
+                  {doc.rt_reminded_at && (
+                    <span className="text-ink-400">
+                      {" "}
+                      (dernière le {new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")})
+                    </span>
+                  )}
+                </>
+              )}
+            </span>
+          </div>
+        )}
+
+        {/* Visibilité & Badge Dépublié */}
         <div className="flex flex-wrap items-center gap-2 mb-4 pt-2 border-t border-black/5 text-xs">
-          <span className={`px-2 py-0.5 rounded-full font-medium ${VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-100 text-ink-500"}`}>
+          <span
+            className={`px-2 py-0.5 rounded-full font-medium ${
+              VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-100 text-ink-500"
+            }`}
+          >
             {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
           </span>
 
-          {isUnpublished ? (
+          {isUnpublished && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
               <EyeOff size={12} className="text-zinc-500" />
-              Dépublié · Exclu du chat RAG
+              Exclu du RAG · Réversible
             </span>
-          ) : (
-            <>
-              {isNotified ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                  <Bell size={12} className="text-amber-500" />
-                  Notifié le {new Date(doc.rt_notified_at!).toLocaleDateString("fr-FR")}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium bg-paper-100 text-ink-400 border border-ink-100">
-                  En attente
-                </span>
-              )}
-
-              {reminderCount > 0 && (
-                <span
-                  className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium ${
-                    reminderCount >= 2
-                      ? "bg-red-100 text-red-700 font-semibold border border-red-200"
-                      : "bg-orange-50 text-orange-700 border border-orange-200"
-                  }`}
-                >
-                  <Send size={11} />
-                  Relancé ({reminderCount}×)
-                  {doc.rt_reminded_at && (
-                    <span className="opacity-80 text-[11px]">
-                      · {new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")}
-                    </span>
-                  )}
-                </span>
-              )}
-            </>
           )}
         </div>
       </div>
@@ -191,13 +360,13 @@ function DocCard({
             href={`/documents/${doc.version_id}/preview`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-lime-700 hover:text-lime-900 transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-medium text-lime-700 hover:text-lime-900 transition-colors focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none rounded"
           >
             Aperçu <ExternalLink size={11} strokeWidth={2} />
           </a>
           <Link
             href="/documents"
-            className="inline-flex items-center gap-1 text-xs font-medium text-ink-400 hover:text-ink-700 transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-medium text-ink-400 hover:text-ink-700 transition-colors focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none rounded"
           >
             Bibliothèque <ExternalLink size={11} strokeWidth={2} />
           </Link>
@@ -210,9 +379,14 @@ function DocCard({
               type="button"
               disabled={acting}
               onClick={() => onAction(doc, "republish")}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-lime-700 hover:bg-lime-800 transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+              title="Réintègre le document dans l'assistant RAG"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-lime-700 hover:bg-lime-800 transition-colors disabled:opacity-50 cursor-pointer shadow-xs focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
             >
-              <Eye size={13} strokeWidth={2} />
+              {acting ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Eye size={13} strokeWidth={2} />
+              )}
               Republier
             </button>
           ) : (
@@ -222,9 +396,14 @@ function DocCard({
                   type="button"
                   disabled={acting}
                   onClick={() => onAction(doc, "notify")}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Crée une tâche pour le propriétaire"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
                 >
-                  <Bell size={13} strokeWidth={2} className="text-amber-600" />
+                  {acting ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Bell size={13} strokeWidth={2} className="text-amber-600" />
+                  )}
                   Notifier
                 </button>
               ) : (
@@ -232,9 +411,14 @@ function DocCard({
                   type="button"
                   disabled={acting}
                   onClick={() => onAction(doc, "remind")}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-900 bg-amber-100/70 hover:bg-amber-100 border border-amber-300 transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Envoie une relance au propriétaire du document"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-900 bg-amber-100/70 hover:bg-amber-100 border border-amber-300 transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
                 >
-                  <Send size={13} strokeWidth={2} className="text-amber-700" />
+                  {acting ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Send size={13} strokeWidth={2} className="text-amber-700" />
+                  )}
                   Relancer
                 </button>
               )}
@@ -243,9 +427,14 @@ function DocCard({
                 type="button"
                 disabled={acting}
                 onClick={() => onAction(doc, "unpublish")}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-white hover:bg-red-50 border border-red-200 transition-colors disabled:opacity-50 cursor-pointer"
+                title="Exclut immédiatement le document de la recherche — réversible"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-white hover:bg-red-50 border border-red-200 transition-colors disabled:opacity-50 cursor-pointer focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
               >
-                <EyeOff size={13} strokeWidth={2} />
+                {acting ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <EyeOff size={13} strokeWidth={2} />
+                )}
                 Dépublier
               </button>
             </>
@@ -281,8 +470,12 @@ export default function ObsoletePage() {
         setError(d.error ?? "Erreur lors du chargement.");
       } else {
         const json = await res.json();
+        // ÉTAPE 2 : Tri par retard décroissant (les plus en retard en premier)
+        const overdueSorted = (json.overdue ?? []).sort(
+          (a: ObsoleteDoc, b: ObsoleteDoc) => b.days_overdue - a.days_overdue
+        );
         setData({
-          overdue: json.overdue ?? [],
+          overdue: overdueSorted,
           approaching: json.approaching ?? [],
           unpublished: json.unpublished ?? [],
           approachingDays: json.approachingDays ?? 30,
@@ -300,6 +493,19 @@ export default function ObsoletePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, []);
+
+  // ÉTAPE 5 : Gestion Escape pour fermer la modal
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setUnpublishModalDoc(null);
+      }
+    }
+    if (unpublishModalDoc) {
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [unpublishModalDoc]);
 
   async function executeAction(
     doc: ObsoleteDoc,
@@ -362,6 +568,17 @@ export default function ObsoletePage() {
     }
   }
 
+  function scrollToSection(id: string) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  const overdueCount = data?.overdue.length ?? 0;
+  const criticalCount = data?.overdue.filter((d) => d.days_overdue >= 30).length ?? 0;
+  const maxDays = overdueCount > 0 ? Math.max(...(data?.overdue.map((d) => d.days_overdue) ?? [0])) : 0;
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
       {/* Floating Toast Notification */}
@@ -381,17 +598,23 @@ export default function ObsoletePage() {
           <span>{toast.message}</span>
           <button
             onClick={() => setToast(null)}
-            className="text-ink-400 hover:text-ink-700 ml-2 cursor-pointer"
+            className="text-ink-400 hover:text-ink-700 ml-2 cursor-pointer focus:outline-none"
           >
             <X size={14} />
           </button>
         </div>
       )}
 
-      {/* Confirmation Modal for Dépublier */}
+      {/* Confirmation Modal for Dépublier (avec Escape et clic extérieur) */}
       {unpublishModalDoc && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-ink-100 p-6 max-w-md w-full shadow-xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setUnpublishModalDoc(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-ink-100 p-6 max-w-md w-full shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
               <ShieldAlert size={24} />
             </div>
@@ -410,14 +633,14 @@ export default function ObsoletePage() {
               <button
                 type="button"
                 onClick={() => setUnpublishModalDoc(null)}
-                className="px-4 py-2 text-sm font-medium text-ink-600 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
+                className="px-4 py-2 text-sm font-medium text-ink-600 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
               >
                 Annuler
               </button>
               <button
                 type="button"
                 onClick={confirmUnpublish}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors cursor-pointer shadow-xs focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
               >
                 Dépublier le document
               </button>
@@ -430,7 +653,7 @@ export default function ObsoletePage() {
       <div>
         <Link
           href="/admin"
-          className="inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-lime-700 transition-colors mb-4"
+          className="inline-flex items-center gap-1.5 text-sm text-ink-400 hover:text-lime-700 transition-colors mb-4 focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none rounded"
         >
           <ArrowLeft size={15} strokeWidth={2} />
           Retour au tableau de bord
@@ -440,24 +663,60 @@ export default function ObsoletePage() {
             <h1 className="font-display text-3xl font-bold text-ink-950 tracking-tight">
               Documents à réviser
             </h1>
-            <p className="text-xs text-ink-400 mt-1">
-              Détection des documents obsolètes, notifications aux propriétaires et dépublication.
+            {/* ÉTAPE 4 : Phrase de synthèse dynamique */}
+            <p className="text-sm text-ink-500 mt-1">
+              {loading ? (
+                "Vérification des cycles de révision en cours…"
+              ) : overdueCount > 0 ? (
+                `${overdueCount} document${overdueCount > 1 ? "s" : ""} nécessite${
+                  overdueCount > 1 ? "nt" : ""
+                } une action — ${maxDays} jours de retard maximum.`
+              ) : (
+                "Tous les documents sont à jour — aucune action urgente requise."
+              )}
             </p>
           </div>
           <button
             type="button"
             onClick={() => load(true)}
             disabled={loading || refreshing}
-            className="inline-flex items-center gap-2 text-sm font-medium text-ink-500 hover:text-lime-700 border border-ink-100 rounded-lg px-3 py-2 bg-white transition-colors disabled:opacity-40 cursor-pointer"
+            title="Rafraîchir les données d'obsolescence"
+            className="inline-flex items-center gap-2 text-sm font-medium text-ink-700 hover:text-lime-800 border border-ink-100 rounded-lg px-3.5 py-2 bg-white hover:bg-paper-50 transition-colors disabled:opacity-40 cursor-pointer shadow-2xs focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
           >
-            <RefreshCw size={14} strokeWidth={2} className={refreshing ? "animate-spin" : ""} />
+            <RefreshCw size={14} strokeWidth={2} className={refreshing ? "animate-spin text-lime-700" : ""} />
             Actualiser
           </button>
         </div>
       </div>
 
+      {/* ÉTAPE 5 : Skeletons au chargement initial */}
       {loading && (
-        <div className="text-center text-ink-300 py-20">Chargement…</div>
+        <div className="space-y-8 animate-pulse">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-white border border-ink-100 rounded-2xl p-4 space-y-3">
+                <div className="w-8 h-8 rounded-xl bg-paper-200" />
+                <div className="h-8 bg-paper-200 rounded w-1/2" />
+                <div className="h-3 bg-paper-200 rounded w-3/4" />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-3">
+            <div className="h-6 bg-paper-200 rounded w-48" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="bg-white border border-ink-100 rounded-2xl p-5 space-y-4">
+                  <div className="flex justify-between">
+                    <div className="h-5 bg-paper-200 rounded w-2/3" />
+                    <div className="h-5 bg-paper-200 rounded w-20" />
+                  </div>
+                  <div className="h-12 bg-paper-100 rounded-xl" />
+                  <div className="h-4 bg-paper-200 rounded w-1/2" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {error && (
@@ -470,7 +729,7 @@ export default function ObsoletePage() {
           <button
             type="button"
             onClick={() => load()}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-lime-700 hover:bg-lime-800 rounded-lg transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-lime-700 hover:bg-lime-800 rounded-lg transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
           >
             <RefreshCw size={16} />
             Réessayer
@@ -480,52 +739,113 @@ export default function ObsoletePage() {
 
       {!loading && data && (
         <>
-          {/* Summary strip — 4 counters */}
+          {/* ÉTAPE 4 : Summary strip — 4 cartes KPI cliquables avec pastilles sémantiques */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white border border-red-200 rounded-2xl p-4 text-center">
+            {/* KPI 1 : En retard */}
+            <button
+              type="button"
+              onClick={() => scrollToSection("section-overdue")}
+              className="bg-white border border-red-200 hover:border-red-300 rounded-2xl p-4 text-left transition-all hover:shadow-sm cursor-pointer group focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <AlertTriangle size={16} />
+                </span>
+                <span className="text-[11px] font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                  Action requise
+                </span>
+              </div>
               <p className="text-3xl font-display font-bold text-red-600">
                 {data.overdue.length}
               </p>
-              <p className="text-xs text-ink-400 mt-1 font-medium">En retard</p>
-            </div>
-            <div className="bg-white border border-amber-200 rounded-2xl p-4 text-center">
+              <p className="text-xs text-ink-500 mt-1 font-medium">En retard</p>
+            </button>
+
+            {/* KPI 2 : dont retard ≥ 30 j */}
+            <button
+              type="button"
+              onClick={() => scrollToSection("section-overdue")}
+              className="bg-white border border-amber-200 hover:border-amber-300 rounded-2xl p-4 text-left transition-all hover:shadow-sm cursor-pointer group focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Flame size={16} />
+                </span>
+                <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+                  Urgence
+                </span>
+              </div>
               <p className="text-3xl font-display font-bold text-amber-600">
-                {data.overdue.filter((d) => d.days_overdue >= 30).length}
+                {criticalCount}
               </p>
-              <p className="text-xs text-ink-400 mt-1 font-medium">dont retard ≥ 30 j.</p>
-            </div>
-            <div className="bg-white border border-sky-200 rounded-2xl p-4 text-center">
+              <p className="text-xs text-ink-500 mt-1 font-medium">dont retard ≥ 30 j.</p>
+            </button>
+
+            {/* KPI 3 : À venir */}
+            <button
+              type="button"
+              onClick={() => scrollToSection("section-approaching")}
+              className="bg-white border border-sky-200 hover:border-sky-300 rounded-2xl p-4 text-left transition-all hover:shadow-sm cursor-pointer group focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <Clock size={16} />
+                </span>
+                <span className="text-[11px] font-medium text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">
+                  À surveiller
+                </span>
+              </div>
               <p className="text-3xl font-display font-bold text-sky-600">
                 {data.approaching.length}
               </p>
-              <p className="text-xs text-ink-400 mt-1 font-medium">
+              <p className="text-xs text-ink-500 mt-1 font-medium">
                 À venir ({data.approachingDays} j.)
               </p>
-            </div>
-            <div className="bg-white border border-zinc-200 rounded-2xl p-4 text-center">
+            </button>
+
+            {/* KPI 4 : Dépubliés */}
+            <button
+              type="button"
+              onClick={() => scrollToSection("section-unpublished")}
+              className="bg-white border border-zinc-200 hover:border-zinc-300 rounded-2xl p-4 text-left transition-all hover:shadow-sm cursor-pointer group focus-visible:ring-2 focus-visible:ring-lime-400 focus:outline-none"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="w-8 h-8 rounded-xl bg-zinc-100 text-zinc-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <EyeOff size={16} />
+                </span>
+                <span className="text-[11px] font-medium text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded-full">
+                  Exclus du chat
+                </span>
+              </div>
               <p className="text-3xl font-display font-bold text-zinc-600">
                 {data.unpublished.length}
               </p>
-              <p className="text-xs text-ink-400 mt-1 font-medium">Dépubliés</p>
-            </div>
+              <p className="text-xs text-ink-500 mt-1 font-medium">Dépubliés</p>
+            </button>
           </div>
 
           {/* Overdue section */}
-          <section className="space-y-3">
+          <section id="section-overdue" className="space-y-4 scroll-mt-6">
             <div className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-amber-500 shrink-0" strokeWidth={2} />
+              <AlertTriangle size={17} className="text-amber-500 shrink-0" strokeWidth={2} />
               <h2 className="font-semibold text-ink-900 text-lg">
                 Révision dépassée
               </h2>
-              <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+              <span className="ml-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
                 {data.overdue.length}
               </span>
             </div>
 
             {data.overdue.length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-ink-500 bg-white border border-ink-100 rounded-2xl px-5 py-4">
-                <CheckCircle2 size={16} className="text-lime-600 shrink-0" />
-                Aucun document en retard de révision.
+              /* ÉTAPE 5 : État vide Révision dépassée soigné */
+              <div className="bg-white border border-ink-100 rounded-2xl p-8 text-center max-w-lg mx-auto space-y-2">
+                <div className="w-12 h-12 rounded-full bg-lime-50 text-lime-600 flex items-center justify-center mx-auto mb-2">
+                  <CheckCircle2 size={24} />
+                </div>
+                <h3 className="font-semibold text-ink-900 text-base">Aucun document en retard</h3>
+                <p className="text-xs text-ink-500 leading-relaxed">
+                  Tous les documents de votre organisation sont conformes à leur cycle de validité.
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -542,13 +862,13 @@ export default function ObsoletePage() {
           </section>
 
           {/* Approaching section */}
-          <section className="space-y-3">
+          <section id="section-approaching" className="space-y-4 scroll-mt-6">
             <div className="flex items-center gap-2">
-              <Clock size={16} className="text-sky-500 shrink-0" strokeWidth={2} />
+              <Clock size={17} className="text-sky-500 shrink-0" strokeWidth={2} />
               <h2 className="font-semibold text-ink-900 text-lg">
                 Révision à venir
               </h2>
-              <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-700">
+              <span className="ml-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-100 text-sky-800">
                 {data.approaching.length}
               </span>
               <span className="text-xs text-ink-400 ml-1">
@@ -557,9 +877,10 @@ export default function ObsoletePage() {
             </div>
 
             {data.approaching.length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-ink-500 bg-white border border-ink-100 rounded-2xl px-5 py-4">
-                <CheckCircle2 size={16} className="text-lime-600 shrink-0" />
-                Aucune révision à venir dans les {data.approachingDays} prochains jours.
+              /* ÉTAPE 5 : État vide À venir soigné */
+              <div className="flex items-center gap-2.5 text-sm text-ink-600 bg-white border border-ink-100 rounded-2xl px-5 py-4 shadow-2xs">
+                <CheckCircle2 size={17} className="text-lime-600 shrink-0" />
+                <span>Aucune révision dans les {data.approachingDays} prochains jours — tout est à jour.</span>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -576,21 +897,27 @@ export default function ObsoletePage() {
           </section>
 
           {/* Unpublished section */}
-          {data.unpublished.length > 0 && (
-            <section className="space-y-3 pt-4 border-t border-ink-100">
-              <div className="flex items-center gap-2">
-                <EyeOff size={16} className="text-zinc-500 shrink-0" strokeWidth={2} />
-                <h2 className="font-semibold text-ink-900 text-lg">
-                  Documents dépubliés
-                </h2>
-                <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700">
-                  {data.unpublished.length}
-                </span>
-                <span className="text-xs text-ink-400 ml-1">
-                  (exclus du chat RAG · prêts à être republiés)
-                </span>
-              </div>
+          <section id="section-unpublished" className="space-y-4 scroll-mt-6 pt-4 border-t border-ink-100">
+            <div className="flex items-center gap-2">
+              <EyeOff size={17} className="text-zinc-500 shrink-0" strokeWidth={2} />
+              <h2 className="font-semibold text-ink-900 text-lg">
+                Documents dépubliés
+              </h2>
+              <span className="ml-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700">
+                {data.unpublished.length}
+              </span>
+              <span className="text-xs text-ink-400 ml-1">
+                (exclus du chat RAG · réversibles à tout moment)
+              </span>
+            </div>
 
+            {data.unpublished.length === 0 ? (
+              /* ÉTAPE 5 : État vide Dépubliés soigné */
+              <div className="flex items-center gap-2.5 text-sm text-ink-600 bg-white border border-ink-100 rounded-2xl px-5 py-4 shadow-2xs">
+                <ShieldCheck size={17} className="text-lime-600 shrink-0" />
+                <span>Aucun document dépublié — le catalogue est 100% accessible dans le chat.</span>
+              </div>
+            ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {data.unpublished.map((doc) => (
                   <DocCard
@@ -601,8 +928,8 @@ export default function ObsoletePage() {
                   />
                 ))}
               </div>
-            </section>
-          )}
+            )}
+          </section>
         </>
       )}
     </div>
