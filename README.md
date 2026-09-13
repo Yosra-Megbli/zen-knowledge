@@ -14,8 +14,7 @@ Le système résout le problème de l'accès cloisonné et sécurisé à l'infor
 
 ## Démo vidéo
 
-Lien : À ajouter après enregistrement de la vidéo de démonstration.
-
+Lien : [Voir la vidéo de démonstration](https://drive.google.com/file/d/1YsSWrdFsn6Fx9m6xCKQpnpstcyD6-6T-/view?usp=sharing)
 ## Tester en 2 minutes
 
 **Application déployée** : https://zen-knowledge.vercel.app  
