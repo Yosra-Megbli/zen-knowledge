@@ -44,6 +44,7 @@ const STATUS_COLORS: Record<string, string> = {
   // Upload never auto-publishes; see handlePublish below.
   ready: "bg-blue-100 text-blue-700",
   failed: "bg-red-100 text-red-700",
+  unpublished: "bg-gray-100 text-gray-700 border border-gray-200",
 };
 
 function formatFileSize(bytes: number): string {
