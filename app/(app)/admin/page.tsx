@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Download, RefreshCw } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Download, RefreshCw, SearchX, Clock } from "lucide-react";
 
 interface ActivityRow {
   action: string;
@@ -181,8 +181,8 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* Questions sans résultat */}
-      <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+      {/* Questions sans résultat (refus récents) */}
+      <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden shadow-xs">
         {refusals.length === 0 ? (
           <div className="px-5 py-4 flex items-center gap-2 text-sm text-ink-500">
             <CheckCircle2 size={16} className="text-lime-600" />
@@ -193,27 +193,75 @@ export default function AdminPage() {
             <button
               type="button"
               onClick={() => setRefusalsOpen((v) => !v)}
-              className="w-full px-5 py-4 border-b border-ink-100 flex items-center justify-between text-left"
+              className="w-full px-5 py-4 border-b border-ink-100 flex items-center justify-between text-left hover:bg-paper-50 transition-colors cursor-pointer"
             >
-              <h2 className="font-medium text-ink-700">Questions sans résultat (refus récents)</h2>
-              <span className="flex items-center gap-2 text-xs text-ink-300">
-                {refusalRate}% de refus
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200/60">
+                  <SearchX size={16} strokeWidth={2} />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-ink-900 text-sm">
+                    Questions sans résultat (refus récents)
+                  </h2>
+                  <p className="text-xs text-ink-400 mt-0.5">
+                    Requêtes restées sans source documentaire · Textes masqués par politique de confidentialité (RGPD)
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                  {refusalRate}% de refus
+                </span>
                 <ChevronDown
-                  size={14}
-                  className={`transition-transform ${refusalsOpen ? "rotate-180" : ""}`}
+                  size={15}
+                  className={`text-ink-400 transition-transform ${refusalsOpen ? "rotate-180" : ""}`}
                 />
-              </span>
+              </div>
             </button>
             {refusalsOpen && (
-              <ul className="divide-y divide-ink-100">
-                {refusals.map((r, i) => (
-                  <li key={i} className="px-5 py-3 flex items-center justify-between text-sm">
-                    <span className="text-ink-500">Question de {r.question_length.toLocaleString("fr-FR")} caractères</span>
-                    <span className="text-xs text-ink-300" title={new Date(r.created_at).toLocaleString("fr-FR")}>
-                      {relativeTime(r.created_at)}
-                    </span>
-                  </li>
-                ))}
+              <ul className="divide-y divide-ink-100/70">
+                {refusals.map((r, i) => {
+                  const typeLabel =
+                    r.question_length < 20
+                      ? "Requête concise"
+                      : r.question_length <= 50
+                      ? "Requête standard"
+                      : "Requête détaillée";
+                  return (
+                    <li
+                      key={i}
+                      className="px-5 py-3.5 flex items-center justify-between gap-4 text-sm hover:bg-amber-50/20 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-ink-800 text-xs sm:text-sm truncate">
+                            {typeLabel}
+                            <span className="text-ink-400 font-normal ml-2 text-xs">
+                              ({r.question_length.toLocaleString("fr-FR")} caractères)
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-ink-400 flex items-center gap-1.5 mt-0.5">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-300" />
+                            Seuil de similarité non atteint · LLM non sollicité
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 text-right">
+                        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-paper-100 text-ink-500 border border-ink-100">
+                          Sans source
+                        </span>
+                        <span
+                          className="text-xs text-ink-400 flex items-center gap-1"
+                          title={new Date(r.created_at).toLocaleString("fr-FR")}
+                        >
+                          <Clock size={12} className="text-ink-300" />
+                          {relativeTime(r.created_at)}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </>
