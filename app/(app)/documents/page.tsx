@@ -365,7 +365,9 @@ export default function DocumentsPage() {
             const json = JSON.parse(text);
             errorMsg = json.error || json.errorMessage || json.message || errorMsg;
           } catch {
-            if (text && text.length < 200) {
+            if (res.status === 500 || res.status === 504) {
+              errorMsg = "Délai dépassé (timeout serverless 10s) ou fichier source indisponible sur le cloud.";
+            } else if (text && text.length < 200) {
               errorMsg = text;
             } else {
               errorMsg = `Erreur serveur (${res.status})`;
