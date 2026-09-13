@@ -1,6 +1,7 @@
 import { auth, signOut } from "../../auth.ts";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { ShieldAlert } from "lucide-react";
 import { Logo } from "../components/Logo.tsx";
 
 // A plain <form action="/api/auth/signout"> POST has no CSRF token —
@@ -18,6 +19,51 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!session?.user) redirect("/login");
 
   const user = session.user;
+
+  // Dedicated UI state for an authenticated user with no company_id:
+  // Preserves fail-closed security (no RLS queries or children components run)
+  // while explaining the situation clearly to the user instead of generic 401s.
+  if (!user.companyId) {
+    return (
+      <div className="min-h-screen flex flex-col bg-paper-100">
+        <header className="bg-ink-950 px-4 sm:px-6 py-3 flex items-center justify-between">
+          <Logo dark />
+          <div className="flex items-center gap-3 text-sm text-ink-300">
+            <span className="hidden sm:inline">{user.email}</span>
+            <form action={handleSignOut}>
+              <button className="text-ink-300 hover:text-white transition-colors">Déconnexion</button>
+            </form>
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-ink-100 p-6 sm:p-8 max-w-md w-full shadow-sm text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert size={24} />
+            </div>
+            <h1 className="text-lg font-semibold text-ink-900 mb-2">
+              Compte non rattaché à une organisation
+            </h1>
+            <p className="text-sm text-ink-500 mb-6 leading-relaxed">
+              Votre compte utilisateur (<strong className="text-ink-700">{user.email}</strong>) est bien authentifié, mais il n&apos;est actuellement rattaché à aucune société dans le système.
+            </p>
+            <div className="bg-paper-100 rounded-xl p-4 text-xs text-ink-600 text-left mb-6 border border-ink-100">
+              <p className="font-medium text-ink-700 mb-1">Que devez-vous faire ?</p>
+              <p>Veuillez contacter votre administrateur pour configurer votre accès et rattacher votre compte à votre entreprise.</p>
+            </div>
+            <form action={handleSignOut}>
+              <button
+                type="submit"
+                className="w-full bg-ink-900 hover:bg-ink-800 text-white font-medium py-2.5 px-4 rounded-xl text-sm transition-colors"
+              >
+                Se déconnecter
+              </button>
+            </form>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const isAdmin = user.role === "admin";
 
   return (
