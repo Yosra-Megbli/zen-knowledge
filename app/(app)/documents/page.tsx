@@ -831,14 +831,14 @@ export default function DocumentsPage() {
           <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-visible shadow-2xs">
             <table className="w-full text-sm table-fixed">
               <colgroup>
-                <col className="w-[28%]" />
-                <col className="w-[18%]" />
+                <col className="w-[27%]" />
+                <col className="w-[17%]" />
                 <col className="w-[10%]" />
                 <col className="w-[12%]" />
                 <col className="w-[7%]" />
                 <col className="w-[11%]" />
-                <col className="w-[8%]" />
-                <col className="w-[6%]" />
+                <col className="w-[9%]" />
+                <col className="w-[7%]" />
               </colgroup>
               <thead className="sticky top-0 bg-paper-100/95 backdrop-blur-xs border-b border-ink-100 z-10 shadow-2xs">
                 <tr>
@@ -986,117 +986,109 @@ export default function DocumentsPage() {
                         )}
                       </td>
 
-                      {/* Action (icônes avec tooltip + menu kebab ⋯) */}
+                      {/* Action (icônes standardisées avec menu kebab ⋯ parfaitement aligné) */}
                       <td className="px-3 py-2.5 text-right relative">
                         <div className="inline-flex items-center justify-end gap-1">
-                          {/* Prioritaire sur les archivés : Réactiver */}
-                          {isArchived && doc.latest_version_id && (
-                            <button
-                              type="button"
-                              onClick={() => handleUnarchive(doc.latest_version_id!, doc.title)}
-                              disabled={unarchivingId === doc.latest_version_id}
-                              className="p-1.5 text-lime-700 hover:bg-lime-50 rounded-lg border border-lime-300 transition-colors cursor-pointer"
-                              title="Réactiver ce document dans le RAG"
-                            >
-                              <RotateCcw
-                                size={14}
-                                className={unarchivingId === doc.latest_version_id ? "animate-spin" : ""}
-                              />
-                            </button>
-                          )}
-
-                          {/* Publier si ready */}
-                          {doc.latest_status === "ready" && doc.latest_version_id && (
-                            <button
-                              type="button"
-                              onClick={() => handlePublish(doc.latest_version_id!)}
-                              disabled={publishingId === doc.latest_version_id}
-                              className="p-1.5 text-lime-700 hover:bg-lime-50 rounded-lg border border-lime-300 transition-colors cursor-pointer"
-                              title="Publier ce document"
-                            >
-                              <CheckCircle2 size={14} />
-                            </button>
-                          )}
-
-                          {/* Réindexer icône si statut = failed */}
-                          {doc.latest_status === "failed" && doc.latest_version_id && (
-                            <button
-                              type="button"
-                              onClick={() => !isArchived && handleRetry(doc.latest_version_id!)}
-                              disabled={isArchived || retryingId === doc.latest_version_id}
-                              className={`p-1.5 rounded-lg border transition-colors ${
-                                isArchived
-                                  ? "text-ink-300 border-ink-100 opacity-40 cursor-not-allowed"
-                                  : "text-red-600 hover:bg-red-50 border-red-200 cursor-pointer"
-                              }`}
-                              title={isArchived ? "Réactivez le document pour le réindexer" : "Réindexer ce document"}
-                            >
-                              <RefreshCw
-                                size={14}
-                                className={retryingId === doc.latest_version_id ? "animate-spin" : ""}
-                              />
-                            </button>
-                          )}
-
-                          {/* Voir (icône) */}
+                          {/* Voir le document (toujours présent dans toutes les lignes) */}
                           {doc.latest_version_id && (
                             <a
                               href={`/documents/${doc.latest_version_id}/preview`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1.5 text-ink-500 hover:text-lime-700 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
+                              className="w-7 h-7 inline-flex items-center justify-center text-ink-400 hover:text-ink-950 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
                               title="Voir le document"
                             >
                               <ExternalLink size={14} strokeWidth={2} />
                             </a>
                           )}
 
-                          {/* Menu Kebab ⋯ */}
+                          {/* Menu Kebab ⋯ TOUJOURS aligné dans le même slot */}
                           {doc.latest_version_id && (
                             <div className="relative inline-block text-left kebab-container">
                               <button
                                 type="button"
                                 onClick={() => setKebabOpenId(kebabOpenId === doc.id ? null : doc.id)}
-                                className="p-1.5 text-ink-400 hover:text-ink-950 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
-                                title="Actions supplémentaires"
+                                className="w-7 h-7 inline-flex items-center justify-center text-ink-400 hover:text-ink-950 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
+                                title="Actions"
                               >
                                 <MoreHorizontal size={14} />
                               </button>
 
                               {kebabOpenId === doc.id && (
                                 <div
-                                  className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-lg border border-ink-100 py-1 z-30 animate-in fade-in"
+                                  className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-ink-100 py-1 z-30 animate-in fade-in"
                                   onMouseLeave={() => setKebabOpenId(null)}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setKebabOpenId(null);
-                                      if (!isArchived) {
-                                        handleRetry(doc.latest_version_id!);
-                                      }
-                                    }}
-                                    disabled={isArchived || retryingId === doc.latest_version_id}
-                                    className={`w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 ${
-                                      isArchived
-                                        ? "text-ink-300 opacity-50 cursor-not-allowed"
-                                        : "text-ink-700 hover:bg-paper-100 cursor-pointer"
-                                    }`}
-                                    title={isArchived ? "Réactivez le document pour le réindexer" : "Réindexer"}
-                                  >
-                                    <RefreshCw size={12} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
-                                    <span>Réindexer</span>
-                                  </button>
-                                  {doc.status === "published" && (
+                                  {/* Réactiver si archivé */}
+                                  {isArchived && (
                                     <button
                                       type="button"
-                                      onClick={() => handleArchive(doc.latest_version_id!, doc.title)}
+                                      onClick={() => {
+                                        setKebabOpenId(null);
+                                        handleUnarchive(doc.latest_version_id!, doc.title);
+                                      }}
+                                      disabled={unarchivingId === doc.latest_version_id}
+                                      className="w-full px-3 py-1.5 text-left text-xs font-medium text-lime-800 hover:bg-lime-50 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <RotateCcw
+                                        size={13}
+                                        className={unarchivingId === doc.latest_version_id ? "animate-spin" : "text-lime-600"}
+                                      />
+                                      <span>Réactiver dans le RAG</span>
+                                    </button>
+                                  )}
+
+                                  {/* Publier si statut prêt */}
+                                  {doc.latest_status === "ready" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setKebabOpenId(null);
+                                        handlePublish(doc.latest_version_id!);
+                                      }}
+                                      disabled={publishingId === doc.latest_version_id}
+                                      className="w-full px-3 py-1.5 text-left text-xs font-medium text-lime-800 hover:bg-lime-50 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <CheckCircle2 size={13} className="text-lime-600" />
+                                      <span>Publier dans le RAG</span>
+                                    </button>
+                                  )}
+
+                                  {/* Réindexer si non archivé */}
+                                  {!isArchived && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setKebabOpenId(null);
+                                        handleRetry(doc.latest_version_id!);
+                                      }}
+                                      disabled={retryingId === doc.latest_version_id}
+                                      className="w-full px-3 py-1.5 text-left text-xs text-ink-700 hover:bg-paper-100 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <RefreshCw
+                                        size={12}
+                                        className={retryingId === doc.latest_version_id ? "animate-spin" : ""}
+                                      />
+                                      <span>Réindexer</span>
+                                    </button>
+                                  )}
+
+                                  {/* Archiver si publié */}
+                                  {doc.status === "published" && !isArchived && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setKebabOpenId(null);
+                                        handleArchive(doc.latest_version_id!, doc.title);
+                                      }}
                                       className="w-full px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
                                     >
                                       <Archive size={12} />
                                       <span>Archiver</span>
                                     </button>
                                   )}
+
+                                  {/* Supprimer */}
                                   <button
                                     type="button"
                                     onClick={() => {
