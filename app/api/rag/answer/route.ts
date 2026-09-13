@@ -3,6 +3,7 @@ import { getAuthContext } from "../../../../lib/permissions/authContext.ts";
 import { answerQuestion } from "../../../../lib/rag/answerQuestion.ts";
 import { ensureConversation, persistTurn } from "../../../../lib/conversation/persist.ts";
 import { LlmError } from "../../../../lib/llm/types.ts";
+import { captureError } from "../../../../lib/monitoring/logger.ts";
 
 export async function POST(request: Request) {
   const ctx = await getAuthContext();
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
         );
       }
       if (err.code === "CONFIGURATION_ERROR") {
-        console.error("POST /api/rag/answer: LLM configuration error", err.message);
+        captureError(err, { route: "POST /api/rag/answer", userId: ctx.userId, companyId: ctx.companyId, errorType: "LLM_CONFIGURATION_ERROR" });
         return NextResponse.json({ error: "AI service is not configured." }, { status: 503 });
       }
       return NextResponse.json(
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
         { status: 502 }
       );
     }
-    console.error("POST /api/rag/answer: unexpected error", err);
+    captureError(err, { route: "POST /api/rag/answer", userId: ctx.userId, companyId: ctx.companyId });
     return NextResponse.json({ error: "internal error" }, { status: 500 });
   }
 }

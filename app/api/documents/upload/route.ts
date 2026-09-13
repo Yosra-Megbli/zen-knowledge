@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "../../../../lib/permissions/authContext.ts";
 import { ingestDocument, type IngestDocumentTarget } from "../../../../lib/ingestion/pipeline/ingestDocument.ts";
 import { IngestionError, IngestionForbiddenError, IngestionNotFoundError } from "../../../../lib/ingestion/errors.ts";
+import { captureError } from "../../../../lib/monitoring/logger.ts";
 
 export async function POST(request: Request) {
   const ctx = await getAuthContext();
@@ -72,11 +73,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: err.message }, { status: 404 });
     }
     if (err instanceof IngestionError) {
-      const status = err.code === "DOCUMENT_DELETED" ? 409 : 422;
+      const status = err.code === "DOCUMENT_DELETED" || err.code === "DUPLICATE_DOCUMENT" ? 409 : 422;
       return NextResponse.json({ error: err.message, code: err.code }, { status });
     }
     // Never leak internal error details/stack traces to the client.
-    console.error("POST /api/documents/upload: unexpected error", err);
+    captureError(err, { route: "POST /api/documents/upload", userId: ctx.userId, companyId: ctx.companyId });
     return NextResponse.json({ error: "internal error" }, { status: 500 });
   }
 }

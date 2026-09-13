@@ -148,6 +148,8 @@ export default function DocumentsPage() {
         setError(
           "Ce PDF ne contient pas de couche texte exploitable. Il s'agit probablement d'un document scanné. Les PDF scannés nécessitent actuellement une étape OCR qui n'est pas disponible dans cette version."
         );
+      } else if (errCode === "DUPLICATE_DOCUMENT") {
+        setError(errMsg || "Un document identique ou de même titre existe déjà dans votre organisation.");
       } else {
         setError(errMsg || "Erreur lors de l'upload.");
       }

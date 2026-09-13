@@ -79,17 +79,27 @@ export async function GET(request: Request) {
       // scoped to the caller's company by RLS (no WHERE company_id needed).
       // CURRENT_DATE used (not NOW()) because review_date is a date column,
       // not a timestamp — comparing with NOW() would do an implicit cast.
-      client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string; days_overdue: number }>(`
+      // The LEFT JOIN on review_tasks surfaces the current W3 task state
+      // (warning → first notification sent, overdue → reminder sent).
+      // Only one open task per document can exist (partial UNIQUE index in
+      // migration 0015), so the join always returns at most one row.
+      client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string; days_overdue: number; rt_status: string | null; rt_notified_at: string | null; rt_reminded_at: string | null }>(`
         SELECT
           d.id,
           v.id AS version_id,
           d.title,
           d.review_date,
           u.email AS owner_email,
-          (CURRENT_DATE - d.review_date::date)::int AS days_overdue
+          (CURRENT_DATE - d.review_date::date)::int AS days_overdue,
+          rt.status                                   AS rt_status,
+          rt.notified_at                              AS rt_notified_at,
+          rt.reminded_at                              AS rt_reminded_at
         FROM documents d
         JOIN document_versions v ON v.document_id = d.id AND v.status = 'published'
         JOIN users u ON u.id = v.uploaded_by
+        LEFT JOIN review_tasks rt
+          ON rt.document_id = d.id
+         AND rt.status NOT IN ('unpublished', 'resolved')
         WHERE d.status = 'published'
           AND d.review_date IS NOT NULL
           AND d.review_date::date < CURRENT_DATE

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { withAuthContext } from "../../db/withAuthContext.ts";
 import { embedPassage } from "../../embeddings/index.ts";
 import { storageProvider } from "../../storage/index.ts";
@@ -74,6 +75,50 @@ export async function ingestDocument(input: IngestDocumentInput): Promise<Ingest
           throw new IngestionError("INVALID_METADATA", "department_id does not belong to your company.");
         }
       }
+
+      // Déduplication : vérifie si un document actif portant exactement le même titre existe déjà dans la société
+      const dupRes = await client.query<{ id: string; current_version_id: string | null }>(
+        `SELECT id, current_version_id FROM documents
+         WHERE company_id = $1 AND LOWER(TRIM(title)) = LOWER(TRIM($2)) AND status != 'deleted'
+         LIMIT 1`,
+        [ctx.companyId, target.title]
+      );
+
+      if (dupRes.rowCount && dupRes.rowCount > 0) {
+        const incomingHash = createHash("sha256").update(validated.data).digest("hex");
+        let sameContent = false;
+        const curVerId = dupRes.rows[0].current_version_id;
+        if (curVerId) {
+          const verRes = await client.query<{ file_key: string }>(
+            `SELECT file_key FROM document_versions WHERE id = $1`,
+            [curVerId]
+          );
+          if (verRes.rows[0]?.file_key && verRes.rows[0].file_key !== "pending") {
+            try {
+              const existingBuf = await storageProvider.read(verRes.rows[0].file_key);
+              const existingHash = createHash("sha256").update(existingBuf).digest("hex");
+              if (existingHash === incomingHash) {
+                sameContent = true;
+              }
+            } catch {
+              // fallback if storage read fails
+            }
+          }
+        }
+
+        if (sameContent) {
+          throw new IngestionError(
+            "DUPLICATE_DOCUMENT",
+            `Un document identique (« ${target.title} ») avec le même contenu existe déjà dans votre organisation.`
+          );
+        } else {
+          throw new IngestionError(
+            "DUPLICATE_DOCUMENT",
+            `Un document intitulé « ${target.title} » existe déjà dans votre organisation. Pour mettre à jour son contenu, ajoutez une nouvelle version.`
+          );
+        }
+      }
+
       const docRes = await client.query<{ id: string }>(
         `INSERT INTO documents (company_id, department_id, owner_id, title, description, visibility, status, review_date)
          VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7)
@@ -82,8 +127,8 @@ export async function ingestDocument(input: IngestDocumentInput): Promise<Ingest
       );
       documentId = docRes.rows[0].id;
     } else {
-      const docRes = await client.query<{ id: string; status: string }>(
-        `SELECT id, status FROM documents WHERE id = $1`,
+      const docRes = await client.query<{ id: string; status: string; current_version_id: string | null }>(
+        `SELECT id, status, current_version_id FROM documents WHERE id = $1`,
         [target.documentId]
       );
       if (docRes.rowCount === 0) {
@@ -92,6 +137,30 @@ export async function ingestDocument(input: IngestDocumentInput): Promise<Ingest
       if (docRes.rows[0].status === "deleted") {
         throw new IngestionError("DOCUMENT_DELETED", "Cannot add a new version to a deleted document.");
       }
+
+      // Déduplication version : vérifie si le fichier téléversé est identique à la version actuelle
+      if (docRes.rows[0].current_version_id) {
+        const curVerRes = await client.query<{ file_key: string }>(
+          `SELECT file_key FROM document_versions WHERE id = $1`,
+          [docRes.rows[0].current_version_id]
+        );
+        if (curVerRes.rows[0]?.file_key && curVerRes.rows[0].file_key !== "pending") {
+          try {
+            const incomingHash = createHash("sha256").update(validated.data).digest("hex");
+            const existingBuf = await storageProvider.read(curVerRes.rows[0].file_key);
+            const existingHash = createHash("sha256").update(existingBuf).digest("hex");
+            if (existingHash === incomingHash) {
+              throw new IngestionError(
+                "DUPLICATE_DOCUMENT",
+                "Le fichier téléversé est identique au contenu de la version actuelle de ce document."
+              );
+            }
+          } catch (e) {
+            if (e instanceof IngestionError) throw e;
+          }
+        }
+      }
+
       documentId = docRes.rows[0].id;
     }
 
@@ -211,15 +280,20 @@ export async function ingestDocument(input: IngestDocumentInput): Promise<Ingest
     // interpolates extracted document text.
     const message = err instanceof Error ? err.message : "Unknown ingestion failure";
 
-    await withAuthContext(ctx, (client) =>
-      client.query(`UPDATE document_versions SET status = 'failed' WHERE id = $1`, [documentVersionId])
-    );
-    await withAuthContext(ctx, (client) =>
-      client.query(
-        `UPDATE ingestion_jobs SET status = 'failed', finished_at = now(), error_code = $1, error_message = $2 WHERE id = $3`,
-        [code, message, ingestionJobId]
-      )
-    );
+    try {
+      await withAuthContext(ctx, (client) =>
+        client.query(`UPDATE document_versions SET status = 'failed' WHERE id = $1`, [documentVersionId])
+      );
+      await withAuthContext(ctx, (client) =>
+        client.query(
+          `UPDATE ingestion_jobs SET status = 'failed', finished_at = now(), error_code = $1, error_message = $2 WHERE id = $3`,
+          [code, message, ingestionJobId]
+        )
+      );
+    } catch {
+      // In case of a true database connection outage, secondary DB status writes will fail;
+      // swallow gracefully to return the structured failure payload to the caller.
+    }
 
     return {
       documentId,

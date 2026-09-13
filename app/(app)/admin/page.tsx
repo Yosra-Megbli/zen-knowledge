@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, Download } from "lucide-react";
 
 interface ActivityRow {
   action: string;
@@ -20,6 +20,9 @@ interface OverdueDoc {
   review_date: string;
   owner_email: string;
   days_overdue: number;
+  rt_status?: string | null;
+  rt_notified_at?: string | null;
+  rt_reminded_at?: string | null;
 }
 
 interface Stats {
@@ -228,12 +231,13 @@ export default function AdminPage() {
             </button>
             {overdueOpen && (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[480px] text-sm">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead className="bg-paper-100 border-b border-ink-100">
                     <tr>
                       <th className="text-left px-5 py-3 font-medium text-ink-300">Titre</th>
                       <th className="text-left px-5 py-3 font-medium text-ink-300">Propriétaire</th>
                       <th className="text-left px-5 py-3 font-medium text-ink-300">Date de révision</th>
+                      <th className="text-left px-5 py-3 font-medium text-ink-300">Statut W3</th>
                       <th className="text-right px-5 py-3 font-medium text-ink-300">Retard (j.)</th>
                     </tr>
                   </thead>
@@ -255,6 +259,27 @@ export default function AdminPage() {
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
                             {new Date(doc.review_date).toLocaleDateString("fr-FR")} · Révision dépassée
                           </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          {doc.rt_status === "overdue" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200"
+                              title={doc.rt_reminded_at ? `Rappel envoyé le ${new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")}` : "Rappel W3 envoyé"}
+                            >
+                              Rappel envoyé (W3)
+                            </span>
+                          ) : doc.rt_status === "warning" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"
+                              title={doc.rt_notified_at ? `Notifié le ${new Date(doc.rt_notified_at).toLocaleDateString("fr-FR")}` : "Notification W3 envoyée"}
+                            >
+                              Notifié (W3)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-paper-100 text-ink-400 border border-ink-100">
+                              En attente W3
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-3 text-right font-semibold text-amber-700 text-xs">
                           {doc.days_overdue.toLocaleString("fr-FR")}
@@ -280,8 +305,19 @@ export default function AdminPage() {
 
       {/* Activité récente */}
       <div className={`bg-white rounded-2xl border border-ink-100 overflow-hidden ${activityLoading ? "opacity-60" : ""}`}>
-        <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between gap-3">
-          <h2 className="font-medium text-ink-700">Activité récente</h2>
+        <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <h2 className="font-medium text-ink-700">Activité récente</h2>
+            <a
+              href="/api/admin/audit?format=csv"
+              download
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-ink-900 bg-paper-100 hover:bg-paper-200 border border-ink-100 px-2.5 py-1 rounded-lg transition-colors"
+              title="Télécharger l'historique complet des logs d'audit au format CSV"
+            >
+              <Download size={13} />
+              Export CSV
+            </a>
+          </div>
           <span className="sm:hidden text-xs text-ink-300 italic shrink-0">← Faites glisser pour voir plus →</span>
         </div>
         <div className="overflow-x-auto">

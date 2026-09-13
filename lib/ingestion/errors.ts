@@ -13,7 +13,8 @@ export type IngestionErrorCode =
   | "STORAGE_FAILURE"
   | "DATABASE_FAILURE"
   | "DOCUMENT_DELETED"
-  | "INVALID_METADATA";
+  | "INVALID_METADATA"
+  | "DUPLICATE_DOCUMENT";
 
 export class IngestionError extends Error {
   readonly code: IngestionErrorCode;
