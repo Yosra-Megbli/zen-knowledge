@@ -4,14 +4,13 @@ import { retryFailedVersion } from "../../../../../lib/ingestion/pipeline/retryV
 import { IngestionError, IngestionForbiddenError, IngestionNotFoundError } from "../../../../../lib/ingestion/errors.ts";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ versionId: string }> }) {
-  const ctx = await getAuthContext();
-  if (!ctx) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const { versionId } = await params;
-
   try {
+    const ctx = await getAuthContext();
+    if (!ctx) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    const { versionId } = await params;
     const result = await retryFailedVersion(ctx, versionId, `retry:${ctx.userId}`);
     if (result.status === "failed") {
       return NextResponse.json(
