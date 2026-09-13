@@ -18,6 +18,10 @@ import {
   X,
   Trash2,
   Loader2,
+  Copy,
+  Check,
+  ChevronDown,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import { LogoMark } from "../../components/Logo.tsx";
@@ -51,8 +55,7 @@ interface ConversationSummary {
   updated_at: string;
 }
 
-// Local (browser) date/time — this runs client-side ("use client"),
-// so grouping matches the viewer's own calendar day, not UTC.
+// Local (browser) date/time — grouping matches the viewer's own calendar day
 function groupConversationsByDate(items: ConversationSummary[]): { label: string; items: ConversationSummary[] }[] {
   const todayStr = new Date().toDateString();
   const yesterday = new Date();
@@ -76,23 +79,6 @@ function groupConversationsByDate(items: ConversationSummary[]): { label: string
   ].filter((g) => g.items.length > 0);
 }
 
-// Real questions the seeded demo dataset can actually answer (not
-// placeholder copy) — clicking one shows the full RAG flow (question
-// -> answer -> citation -> source document) in one click instead of
-// requiring a blank page and a typed question.
-//
-// "Confidentialité" targets a restricted-visibility document
-// (admin-only in the demo dataset) — restrictedToAdmin filters it out
-// for any other role, via the exact same rule
-// lib/permissions/documentVisibility.ts's canAccessDocumentVisibility
-// applies server-side (visibility === "restricted" -> role === "admin").
-// Clicking it as a non-admin was never a real access-control gap —
-// retrieveAuthorizedChunks()/RLS would already refuse the question
-// like any manually-typed one — this is purely about not surfacing a
-// suggestion that predictably dead-ends for that viewer. The other
-// three suggestions are company- or department-visible; department
-// scoping isn't applied here since a generic topical suggestion isn't
-// tied to one specific document/department the way this one is.
 const SUGGESTIONS: { icon: LucideIcon; label: string; question: string; restrictedToAdmin?: boolean }[] = [
   { icon: Package, label: "Politique produit", question: "Quel est le délai de retour produit ?" },
   { icon: Users, label: "RH", question: "Quelle est la procédure d'intégration des nouveaux employés ?" },
@@ -101,7 +87,6 @@ const SUGGESTIONS: { icon: LucideIcon; label: string; question: string; restrict
 ];
 
 export default function ChatPage() {
-  // useSearchParams() requires a Suspense boundary in the App Router.
   return (
     <Suspense fallback={null}>
       <ChatPageInner />
@@ -126,7 +111,14 @@ function ChatPageInner() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string | null } | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState<number | null>(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -137,9 +129,18 @@ function ChatPageInner() {
 
   const visibleSuggestions = SUGGESTIONS.filter((s) => !s.restrictedToAdmin || isAdmin);
 
+  // Auto scroll down smoothly on new messages or loading updates
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading, loadingPhase]);
+
+  // Handle textarea auto-resize
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+    }
+  }, [input]);
 
   const fetchConversations = useCallback(async () => {
     const res = await fetch("/api/conversations");
@@ -152,7 +153,7 @@ function ChatPageInner() {
   }, [fetchConversations]);
 
   function handleDeleteConversation(e: React.MouseEvent, id: string, title: string | null) {
-    e.stopPropagation(); // the row itself also navigates on click
+    e.stopPropagation();
     setConfirmDelete({ id, title });
   }
 
@@ -172,15 +173,45 @@ function ChatPageInner() {
     }
   }
 
-  // Loads whichever conversation the URL points to (?c=<id>), or
-  // resets to the empty "new conversation" state when absent — this
-  // is the ONLY place conversationId/messages are driven by the URL,
-  // so the browser back/forward buttons and a pasted link both work.
+  async function handleConfirmDeleteAll() {
+    setConfirmDeleteAll(false);
+    setDeletingAll(true);
+    try {
+      const res = await fetch("/api/conversations", { method: "DELETE" });
+      if (res.ok) {
+        setConversations([]);
+        setConversationId(null);
+        setMessages([]);
+        router.push("/chat");
+      }
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
+  function handleScroll() {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBottom(distanceFromBottom > 140);
+  }
+
+  function scrollToBottom() {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    setShowScrollBottom(false);
+  }
+
+  function handleCopy(index: number, content: string) {
+    navigator.clipboard.writeText(content);
+    setCopiedMessageIndex(index);
+    setTimeout(() => {
+      setCopiedMessageIndex((prev) => (prev === index ? null : prev));
+    }, 2000);
+  }
+
+  // Synchronize conversation state from URL (?c=<id>)
   useEffect(() => {
     if (!activeConversationParam) {
-      // Synchronizing local state with the URL (the external source of
-      // truth for which conversation is active) — the same accepted
-      // pattern as fetchDocs() elsewhere in this codebase.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setConversationId(null);
       setMessages([]);
@@ -207,9 +238,6 @@ function ChatPageInner() {
         setConversationId(activeConversationParam);
       })
       .catch(() => {
-        // Conversation not found / not ours (404) or any other
-        // failure — fall back to a fresh conversation rather than
-        // leaving the page stuck on a broken load.
         if (!cancelled) router.replace("/chat");
       })
       .finally(() => {
@@ -218,21 +246,20 @@ function ChatPageInner() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConversationParam]);
+  }, [activeConversationParam, conversationId, router]);
 
-  async function send(e: React.FormEvent, overrideQuestion?: string) {
-    e.preventDefault();
+  async function send(e?: React.FormEvent, overrideQuestion?: string) {
+    if (e) e.preventDefault();
     const question = (overrideQuestion ?? input).trim();
     if (!question || loading) return;
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
     setLoadingPhase("retrieving");
-    // /api/rag/answer processes question in two sequential stages:
-    // 1. Semantic retrieval (embeddings + PostgreSQL pgvector query, ~500-700ms)
-    // 2. Answer synthesis by LLM (Groq / OpenAI, ~800-1500ms)
-    // We transition visually to Phase 2 after 700ms so both states are visible.
+
     const phaseTimer = setTimeout(() => {
       setLoadingPhase("generating");
     }, 700);
@@ -275,9 +302,6 @@ function ChatPageInner() {
         ]);
       }
 
-      // First turn of a brand new conversation: reflect it in the URL
-      // (without a history entry per keystroke-triggered send) and
-      // refresh the sidebar so it appears immediately.
       if (isNewConversation) {
         router.replace(`/chat?c=${data.conversationId}`, { scroll: false });
         fetchConversations();
@@ -290,12 +314,26 @@ function ChatPageInner() {
     } finally {
       clearTimeout(phaseTimer);
       setLoading(false);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (input.trim() && !loading) {
+        send();
+      }
     }
   }
 
   async function sendFeedback(msgIndex: number, rating: "useful" | "not_useful") {
     const msg = messages[msgIndex];
-    if (!msg.messageId || msg.feedback) return;
+    if (!msg.messageId) return;
+    if (msg.feedback === rating) return; // already in this state
+
     // Optimistic update
     setMessages((prev) =>
       prev.map((m, i) => (i === msgIndex ? { ...m, feedback: rating } : m))
@@ -307,23 +345,6 @@ function ChatPageInner() {
     }).catch(() => {});
   }
 
-  // Mirrors the bracket-variant tolerance in lib/rag/answerQuestion.ts'
-  // extractCitations(): the model doesn't always emit plain ASCII
-  // "[SOURCE n]" (observed fullwidth CJK brackets and stray zero-width
-  // characters from the real Groq/gpt-oss-120b provider), so this must
-  // normalize the same variants before matching, or the raw marker
-  // leaks into the visible answer text.
-  //
-  // Renders markdown (the model reliably emits "**bold**" etc., which
-  // was previously shown as literal asterisks) and turns each [n]
-  // marker into a real clickable citation — not just the source card
-  // below the bubble — opening the exact document version at the
-  // cited page, per "chaque citation ouvre le bon document au passage
-  // utilisé".
-  // The citation's primary destination: the in-app preview page,
-  // opened at the cited passage (chunkId highlights it there; the
-  // snippet is also passed so the highlight still works even if the
-  // chunk row was later deleted — see the preview page's fallback).
   function previewUrl(citation: Citation) {
     const params = new URLSearchParams();
     if (citation.chunkId) params.set("chunk", citation.chunkId);
@@ -347,54 +368,82 @@ function ChatPageInner() {
         );
       }
       const citation = citations.find((c) => c.sourceIndex === Number(match[1]));
-      // A citation index the model mentioned but that extractCitations()
-      // didn't keep (fabricated / out of range) renders as plain text,
-      // never as a button pointing nowhere.
       if (!citation) return <Fragment key={i}>{part}</Fragment>;
+
       return (
-        <a
-          key={i}
-          href={previewUrl(citation)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={`${citation.documentTitle} — v${citation.versionNumber}${citation.pageNumber ? `, page ${citation.pageNumber}` : ""}`}
-          className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-lime-100 px-1 align-super text-[10px] font-bold text-lime-700 no-underline transition-colors hover:bg-lime-400"
-        >
-          {match[1]}
-        </a>
+        <span key={i} className="relative inline-block group/cite">
+          <a
+            href={previewUrl(citation)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-lime-100 px-1.5 align-super text-[10px] font-bold text-lime-800 no-underline transition-all hover:bg-lime-400 hover:scale-105 active:scale-95 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-500"
+          >
+            {match[1]}
+          </a>
+
+          {/* Source preview tooltip on hover */}
+          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/cite:flex flex-col w-72 max-w-[calc(100vw-3rem)] rounded-xl border border-ink-100 bg-white p-3 shadow-xl z-50 text-left transition-all">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-ink-950 mb-1">
+              <FileText size={13} className="text-lime-600 shrink-0" />
+              <span className="truncate">{citation.documentTitle}</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-[10px] text-ink-400 mb-1.5 font-medium">
+              <span className="bg-paper-200 px-1.5 py-0.5 rounded text-ink-700">v{citation.versionNumber}</span>
+              {citation.pageNumber && (
+                <span className="bg-paper-200 px-1.5 py-0.5 rounded text-ink-700">p.{citation.pageNumber}</span>
+              )}
+            </span>
+            <span className="text-[11px] leading-relaxed text-ink-600 line-clamp-3 bg-paper-50 p-2 rounded border border-ink-50 italic">
+              &ldquo;{citation.snippetText}&rdquo;
+            </span>
+            <span className="text-[9px] text-lime-700 font-medium mt-1.5 text-right">
+              Cliquer pour ouvrir au passage ↗
+            </span>
+          </span>
+        </span>
       );
     });
   }
 
   const inputForm = (
-    <form onSubmit={send} className="max-w-3xl mx-auto flex gap-3">
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Posez une question sur vos documents…"
-        disabled={loading}
-        className="flex-1 border border-ink-100 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400 disabled:opacity-60"
-      />
+    <form onSubmit={(e) => send(e)} className="max-w-3xl mx-auto flex items-end gap-2.5">
+      <div className="relative flex-1 rounded-2xl border border-ink-100 bg-white shadow-xs focus-within:border-lime-400 focus-within:ring-2 focus-within:ring-lime-400/20 transition-all">
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Posez une question sur vos documents… (Entrée pour envoyer, Maj+Entrée pour nouvelle ligne)"
+          disabled={loading}
+          className="w-full resize-none border-0 bg-transparent px-4 py-3 text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none focus:ring-0 disabled:opacity-50 max-h-40 overflow-y-auto leading-relaxed"
+          style={{ minHeight: "44px" }}
+        />
+      </div>
       <button
         type="submit"
         disabled={loading || !input.trim()}
-        title="Envoyer"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink-950 text-white transition-colors hover:bg-lime-500 hover:text-ink-950 disabled:opacity-30 disabled:hover:bg-ink-950 disabled:hover:text-white"
+        title={loading ? "Recherche en cours…" : "Envoyer"}
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-all ${
+          input.trim() && !loading
+            ? "bg-lime-500 text-ink-950 shadow-sm hover:bg-lime-400 hover:scale-105 active:scale-95 cursor-pointer"
+            : "bg-paper-200 text-ink-300 cursor-not-allowed opacity-60"
+        } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400`}
       >
-        <ArrowUp size={18} strokeWidth={2.5} />
+        {loading ? (
+          <Loader2 size={18} className="animate-spin text-ink-950" />
+        ) : (
+          <ArrowUp size={18} strokeWidth={2.5} />
+        )}
       </button>
     </form>
   );
 
-  // Desktop (md+): a normal static column, exactly as before. Mobile:
-  // a slide-in drawer over a backdrop, since there's no room for a
-  // permanent 256px column — this is the "accessible alternative on
-  // small screens" the sidebar needs, not a second UI to maintain.
   const sidebar = (
     <>
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden transition-opacity"
           onClick={() => setMobileSidebarOpen(false)}
         />
       )}
@@ -403,40 +452,58 @@ function ChatPageInner() {
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
         } md:static md:z-auto md:w-64 md:translate-x-0 md:transition-none flex shrink-0 flex-col border-r border-ink-100 bg-paper-100 h-full`}
       >
-        <div className="p-3 flex items-center gap-2">
+        <div className="p-3 flex items-center gap-2 border-b border-ink-100/60">
           <button
             onClick={() => {
               router.push("/chat");
               setMobileSidebarOpen(false);
             }}
-            className="flex-1 flex items-center gap-2 rounded-lg border border-ink-100 bg-white px-3 py-2 text-sm font-medium text-ink-700 hover:border-lime-400 hover:text-lime-700 transition-colors"
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-ink-100 bg-white px-3 py-2 text-sm font-medium text-ink-800 hover:border-lime-400 hover:text-lime-800 hover:shadow-2xs transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
           >
-            <Plus size={15} strokeWidth={2.5} />
+            <Plus size={15} strokeWidth={2.5} className="text-lime-600" />
             Nouvelle conversation
           </button>
+          {conversations.length > 0 && (
+            <button
+              onClick={() => setConfirmDeleteAll(true)}
+              className="p-2 rounded-xl border border-transparent text-ink-300 hover:border-red-100 hover:bg-red-50 hover:text-red-600 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              title="Tout supprimer"
+            >
+              <Trash2 size={15} strokeWidth={2} />
+            </button>
+          )}
           <button
             onClick={() => setMobileSidebarOpen(false)}
-            className="md:hidden p-2 text-ink-300 hover:text-ink-700"
+            className="md:hidden p-2 text-ink-400 hover:text-ink-800 focus-visible:outline-none"
             title="Fermer"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-2 pb-3">
+
+        <div className="flex-1 overflow-y-auto px-2 py-3">
           {conversations.length === 0 ? (
-            <p className="text-xs text-ink-300 px-2 py-2">Aucune conversation.</p>
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <div className="w-10 h-10 rounded-full bg-paper-200 flex items-center justify-center mb-2.5 text-ink-300">
+                <MessageSquare size={18} strokeWidth={1.8} />
+              </div>
+              <p className="text-xs font-medium text-ink-600">Aucune conversation</p>
+              <p className="text-[11px] text-ink-300 mt-0.5">Posez une question pour commencer.</p>
+            </div>
           ) : (
             groupConversationsByDate(conversations).map((group) => (
-              <div key={group.label} className="mb-2">
-                <p className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-300">
+              <div key={group.label} className="mb-3">
+                <p className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-ink-300">
                   {group.label}
                 </p>
                 <div className="space-y-0.5">
                   {group.items.map((c) => (
                     <div
                       key={c.id}
-                      className={`flex items-center gap-1 rounded-lg pr-1 transition-colors ${
-                        c.id === conversationId ? "bg-lime-100" : "hover:bg-white"
+                      className={`group relative flex items-center rounded-lg pr-1 transition-all border-l-2 ${
+                        c.id === conversationId
+                          ? "bg-lime-50/80 border-lime-500 text-ink-950 font-medium shadow-2xs"
+                          : "border-transparent hover:bg-white text-ink-600 hover:text-ink-900"
                       }`}
                     >
                       <button
@@ -444,18 +511,22 @@ function ChatPageInner() {
                           router.push(`/chat?c=${c.id}`);
                           setMobileSidebarOpen(false);
                         }}
-                        className={`flex-1 min-w-0 flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm truncate transition-colors ${
-                          c.id === conversationId ? "text-ink-950 font-medium" : "text-ink-500 hover:text-ink-900"
-                        }`}
-                        title={c.title ?? "Nouvelle conversation"}
+                        className="flex-1 min-w-0 flex items-center gap-2 px-2.5 py-2 text-left text-sm focus-visible:outline-none"
+                        title={c.title || "Nouvelle conversation"}
                       >
-                        <MessageSquare size={14} strokeWidth={2} className="shrink-0" />
+                        <MessageSquare
+                          size={14}
+                          strokeWidth={2}
+                          className={`shrink-0 ${
+                            c.id === conversationId ? "text-lime-600" : "text-ink-300 group-hover:text-ink-500"
+                          }`}
+                        />
                         <span className="truncate">{c.title || "Nouvelle conversation"}</span>
                       </button>
                       <button
                         onClick={(e) => handleDeleteConversation(e, c.id, c.title)}
                         disabled={deletingConversationId === c.id}
-                        className="shrink-0 p-1.5 rounded-md text-ink-200 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
+                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 p-1.5 rounded-md text-ink-300 hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50 focus-visible:outline-none"
                         title="Supprimer la conversation"
                       >
                         <Trash2 size={13} strokeWidth={2} />
@@ -469,10 +540,10 @@ function ChatPageInner() {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Single Conversation Modal */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
                 <Trash2 size={20} className="text-red-600" strokeWidth={2} />
@@ -489,16 +560,54 @@ function ChatPageInner() {
               <button
                 type="button"
                 onClick={() => setConfirmDelete(null)}
-                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors"
+                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
               >
                 Annuler
               </button>
               <button
                 type="button"
                 onClick={confirmAndDeleteConversation}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
               >
                 Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete All Conversations Modal */}
+      {confirmDeleteAll && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                <Trash2 size={22} className="text-red-600" strokeWidth={2} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-ink-950 text-base mb-1">
+                  Supprimer toutes les conversations ?
+                </h2>
+                <p className="text-sm text-ink-500 leading-relaxed">
+                  Toutes vos conversations ainsi que leur historique seront définitivement supprimés. Cette action est irréversible.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAll(false)}
+                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAll}
+                disabled={deletingAll}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              >
+                {deletingAll ? "Suppression…" : "Tout supprimer"}
               </button>
             </div>
           </div>
@@ -507,62 +616,59 @@ function ChatPageInner() {
     </>
   );
 
-  // Mobile-only button that opens the drawer above — placed inline in
-  // both render branches below (empty state / active conversation)
-  // since neither shares a common wrapper.
   const mobileHistoryButton = (
     <button
       onClick={() => setMobileSidebarOpen(true)}
-      className="md:hidden inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-lime-700 transition-colors px-2 py-1"
+      className="md:hidden inline-flex items-center gap-1.5 text-xs font-medium text-ink-600 hover:text-lime-700 transition-colors px-2.5 py-1.5 rounded-lg border border-ink-100 bg-white shadow-2xs"
       title="Historique des conversations"
     >
-      <History size={15} strokeWidth={2} />
-      Conversations
+      <History size={14} strokeWidth={2} />
+      Historique
     </button>
   );
 
-  // Empty state: title + suggestions + input form centered together as
-  // one block (ChatGPT/Claude-style), not a title floating above a
-  // large empty gap with the input pinned to the bottom. Once a first
-  // message exists, the layout switches to a scrollable history with
-  // the input pinned as a sticky bottom bar.
+  // Empty state: centered welcome with interactive suggestion cards
   if (messages.length === 0 && !loadingHistory) {
     return (
       <div className="flex h-[calc(100vh-57px)]">
         {sidebar}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 bg-paper-50/40">
           <div className="md:hidden px-4 pt-3">{mobileHistoryButton}</div>
-          <div className="flex-1 flex flex-col items-center justify-center px-4">
-          <div className="w-full max-w-xl text-center">
-            <span className="inline-flex mb-5">
-              <LogoMark className="w-12 h-12" />
-            </span>
-            <p className="font-display text-2xl sm:text-4xl font-bold text-ink-950 mb-3 tracking-tight">Comment puis-je vous aider ?</p>
-            <p className="text-sm text-ink-500 mb-8">
-              Interrogez les documents autorisés de votre entreprise.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left mb-8">
-              {visibleSuggestions.map((s) => (
-                <button
-                  key={s.question}
-                  onClick={(e) => send(e, s.question)}
-                  disabled={loading}
-                  className="flex items-start gap-3 bg-white border border-ink-100 rounded-lg p-4 hover:border-lime-400 hover:shadow-sm transition-all disabled:opacity-50"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-lime-100 text-lime-700">
-                    <s.icon size={16} strokeWidth={2} />
-                  </span>
-                  <span>
-                    <span className="block text-[11px] font-bold uppercase tracking-wider text-lime-700 mb-1">
-                      {s.label}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+            <div className="w-full max-w-xl text-center">
+              <span className="inline-flex mb-4">
+                <LogoMark className="w-12 h-12" />
+              </span>
+              <h1 className="font-display text-2xl sm:text-4xl font-bold text-ink-950 mb-2 tracking-tight">
+                Comment puis-je vous aider ?
+              </h1>
+              <p className="text-sm text-ink-500 mb-8">
+                Interrogez les documents autorisés de votre entreprise en toute confiance.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left mb-8">
+                {visibleSuggestions.map((s) => (
+                  <button
+                    key={s.question}
+                    onClick={() => send(undefined, s.question)}
+                    disabled={loading}
+                    className="group flex items-start gap-3.5 bg-white border border-ink-100 rounded-xl p-4 hover:border-lime-400 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 disabled:opacity-50 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lime-100 text-lime-700 group-hover:bg-lime-500 group-hover:text-ink-950 transition-colors">
+                      <s.icon size={17} strokeWidth={2} />
                     </span>
-                    <span className="block text-sm text-ink-950">{s.question}</span>
-                  </span>
-                </button>
-              ))}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-lime-700 mb-1">
+                        {s.label}
+                      </span>
+                      <span className="block text-sm font-medium text-ink-950 group-hover:text-ink-900 transition-colors leading-snug">
+                        {s.question}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {inputForm}
             </div>
-            {inputForm}
-          </div>
           </div>
         </div>
       </div>
@@ -572,53 +678,66 @@ function ChatPageInner() {
   return (
     <div className="flex h-[calc(100vh-57px)]">
       {sidebar}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative bg-paper-50/30">
         <div className="md:hidden px-4 pt-3">{mobileHistoryButton}</div>
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full">
+
+        {/* Scrollable Messages Area */}
+        <div
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 max-w-3xl mx-auto w-full"
+        >
           {loadingHistory ? (
-            <p className="text-center text-ink-300 text-sm py-10">Chargement de la conversation…</p>
+            <div className="flex items-center justify-center py-20 gap-2 text-ink-400 text-sm">
+              <Loader2 size={18} className="animate-spin text-lime-600" />
+              <span>Chargement de la conversation…</span>
+            </div>
           ) : (
             messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] ${msg.role === "user" ? "order-2" : ""}`}>
+                <div className={`max-w-[88%] sm:max-w-[85%] ${msg.role === "user" ? "order-2" : ""}`}>
                   <div
-                    className={`rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                    className={`rounded-2xl px-4 py-3.5 text-sm leading-relaxed whitespace-pre-wrap ${
                       msg.role === "user"
-                        ? "bg-ink-950 text-white rounded-br-sm"
+                        ? "bg-ink-950 text-white rounded-br-sm shadow-2xs"
                         : msg.refusal
-                        ? "bg-amber-50 border border-amber-200 text-amber-800 rounded-bl-sm"
-                        : "bg-white border border-ink-100 text-ink-900 rounded-bl-sm shadow-sm"
+                        ? "bg-amber-50 border border-amber-200 text-amber-900 rounded-bl-sm"
+                        : "bg-white border border-ink-100 text-ink-900 rounded-bl-sm shadow-xs"
                     }`}
                   >
                     {msg.role === "assistant" ? renderAnswer(msg.content, msg.citations ?? []) : msg.content}
                   </div>
 
-                  {/* Citations */}
+                  {/* Sources Cards */}
                   {msg.citations && msg.citations.length > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      <p className="text-xs text-ink-300 font-medium px-1">Sources</p>
+                    <div className="mt-3 space-y-1.5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-400 px-1">
+                        Sources citées
+                      </p>
                       {msg.citations.map((c) => {
                         const key = `${i}-${c.sourceIndex}`;
-                        // Only a deleted DOCUMENT blocks access — an
-                        // "archived" version (superseded by a newer
-                        // one) stays fully viewable, historical
-                        // citations must remain verifiable.
                         const isDeleted = c.documentStatus === "deleted";
                         return (
-                          <div key={key} className="bg-white border border-ink-100 rounded-xl text-xs">
-                            <div className="flex items-center justify-between gap-2 px-3 py-2">
+                          <div
+                            key={key}
+                            className="group/src bg-white border border-ink-100 hover:border-lime-300 rounded-xl text-xs transition-all shadow-2xs"
+                          >
+                            <div className="flex items-center justify-between gap-2 px-3 py-2.5">
                               <button
                                 onClick={() => setExpanded(expanded === key ? null : key)}
-                                className="flex-1 text-left font-medium text-ink-700 truncate hover:text-lime-600 transition-colors"
+                                className="flex-1 min-w-0 flex items-center gap-2 text-left font-medium text-ink-800 truncate hover:text-lime-700 transition-colors focus-visible:outline-none"
                               >
-                                [{c.sourceIndex}] {c.documentTitle}
+                                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime-100 text-[10px] font-bold text-lime-800">
+                                  {c.sourceIndex}
+                                </span>
+                                <FileText size={14} className="text-ink-400 shrink-0 group-hover/src:text-lime-600 transition-colors" />
+                                <span className="truncate font-semibold text-ink-900">{c.documentTitle}</span>
                                 {isDeleted && (
-                                  <span className="ml-1.5 text-ink-300 font-normal">(document supprimé)</span>
+                                  <span className="text-ink-300 font-normal shrink-0">(document supprimé)</span>
                                 )}
                               </button>
                               <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-ink-300">
+                                <span className="text-[11px] text-ink-400 bg-paper-200 px-2 py-0.5 rounded-full font-medium">
                                   v{c.versionNumber}{c.pageNumber ? ` · p.${c.pageNumber}` : ""}
                                 </span>
                                 {!isDeleted && (
@@ -626,18 +745,21 @@ function ChatPageInner() {
                                     href={previewUrl(c)}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-lime-600 hover:text-lime-800 transition-colors"
-                                    title="Ouvrir le document"
+                                    className="p-1 text-ink-400 hover:text-lime-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 rounded"
+                                    title="Ouvrir le document au passage utilisé"
                                   >
                                     <ExternalLink size={13} strokeWidth={2} />
                                   </a>
                                 )}
                               </div>
                             </div>
+                            {/* Expandable snippet preview */}
                             {expanded === key && (
-                              <p className="px-3 pb-2 text-ink-500 leading-relaxed border-t border-ink-100 pt-2">
-                                {c.snippetText}
-                              </p>
+                              <div className="px-3 pb-3 pt-2 text-ink-600 text-[11px] leading-relaxed border-t border-ink-100 bg-paper-50/50 rounded-b-xl">
+                                <p className="italic bg-white p-2.5 rounded-lg border border-ink-100 font-mono text-[11px] text-ink-700">
+                                  &ldquo;{c.snippetText}&rdquo;
+                                </p>
+                              </div>
                             )}
                           </div>
                         );
@@ -645,34 +767,61 @@ function ChatPageInner() {
                     </div>
                   )}
 
-                  {/* Feedback + latency */}
-                  {msg.role === "assistant" && !msg.refusal && msg.messageId && (
-                    <div className="flex items-center gap-3 mt-1.5 px-1">
-                      {msg.feedback ? (
-                        <span className="flex items-center gap-1 text-xs text-ink-300">
-                          {msg.feedback === "useful" ? <ThumbsUp size={13} /> : <ThumbsDown size={13} />}
-                          {msg.feedback === "useful" ? "Utile" : "Pas utile"}
-                        </span>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => sendFeedback(i, "useful")}
-                            className="text-ink-300 hover:text-lime-700 transition-colors"
-                            title="Réponse utile"
-                          >
-                            <ThumbsUp size={14} strokeWidth={2} />
-                          </button>
-                          <button
-                            onClick={() => sendFeedback(i, "not_useful")}
-                            className="text-ink-300 hover:text-red-500 transition-colors"
-                            title="Réponse pas utile"
-                          >
-                            <ThumbsDown size={14} strokeWidth={2} />
-                          </button>
-                        </>
-                      )}
+                  {/* Actions (Feedback, Copier) + Latency */}
+                  {msg.role === "assistant" && !msg.refusal && (
+                    <div className="flex items-center justify-between gap-3 mt-2 px-1">
+                      <div className="flex items-center gap-1.5">
+                        {msg.messageId && (
+                          <>
+                            <button
+                              onClick={() => sendFeedback(i, "useful")}
+                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 ${
+                                msg.feedback === "useful"
+                                  ? "bg-lime-100 text-lime-700 ring-1 ring-lime-400 font-semibold"
+                                  : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                              }`}
+                              title="Réponse utile"
+                            >
+                              <ThumbsUp size={13} strokeWidth={2} />
+                              <span className="text-[11px]">Utile</span>
+                            </button>
+                            <button
+                              onClick={() => sendFeedback(i, "not_useful")}
+                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
+                                msg.feedback === "not_useful"
+                                  ? "bg-red-100 text-red-700 ring-1 ring-red-400 font-semibold"
+                                  : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                              }`}
+                              title="Réponse inexacte ou incomplète"
+                            >
+                              <ThumbsDown size={13} strokeWidth={2} />
+                              <span className="text-[11px]">Inexact</span>
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => handleCopy(i, msg.content)}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-400 hover:bg-paper-200 hover:text-ink-700 transition-colors ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
+                          title="Copier la réponse"
+                        >
+                          {copiedMessageIndex === i ? (
+                            <>
+                              <Check size={13} className="text-lime-600" strokeWidth={2.5} />
+                              <span className="text-[11px] text-lime-700 font-semibold">Copié ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={13} strokeWidth={2} />
+                              <span className="text-[11px]">Copier</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
                       {msg.latencyMs != null && (
-                        <span className="text-xs text-ink-300">{(msg.latencyMs / 1000).toFixed(1)}s</span>
+                        <span className="text-[11px] font-mono text-ink-300">
+                          {(msg.latencyMs / 1000).toFixed(1)}s
+                        </span>
                       )}
                     </div>
                   )}
@@ -680,11 +829,17 @@ function ChatPageInner() {
               </div>
             ))
           )}
+
+          {/* Typing Indicator during generation */}
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-white border border-ink-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm flex items-center gap-2.5 text-sm text-ink-500">
-                <Loader2 size={16} className="animate-spin text-lime-600 shrink-0" />
-                <span>
+              <div className="bg-white border border-ink-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-2xs flex items-center gap-3 text-sm text-ink-600">
+                <div className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce [animation-delay:-0.3s]" />
+                  <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce [animation-delay:-0.15s]" />
+                  <span className="h-2 w-2 rounded-full bg-lime-500 animate-bounce" />
+                </div>
+                <span className="text-xs font-medium text-ink-500">
                   {loadingPhase === "retrieving"
                     ? "Recherche dans vos documents…"
                     : "Génération de la réponse…"}
@@ -695,8 +850,19 @@ function ChatPageInner() {
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
-        <div className="border-t border-ink-100 bg-white px-4 py-4">
+        {/* Floating Scroll-to-bottom Button */}
+        {showScrollBottom && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-24 right-6 md:right-8 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-white border border-ink-100 shadow-md text-ink-600 hover:text-ink-950 hover:bg-paper-100 transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
+            title="Défiler vers le bas"
+          >
+            <ChevronDown size={18} strokeWidth={2.5} />
+          </button>
+        )}
+
+        {/* Sticky Input Bar */}
+        <div className="border-t border-ink-100 bg-white/95 backdrop-blur-xs px-4 py-4">
           {inputForm}
         </div>
       </div>

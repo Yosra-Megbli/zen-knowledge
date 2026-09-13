@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthContext } from "../../../lib/permissions/authContext.ts";
 import { withAuthContext } from "../../../lib/db/withAuthContext.ts";
 
+import { deleteAllConversations } from "../../../lib/conversation/persist.ts";
+
 // GET /api/conversations
 //
 // Lists the CALLER'S OWN conversations, most recently active first.
@@ -33,3 +35,14 @@ export async function GET() {
 
   return NextResponse.json(rows);
 }
+
+// DELETE /api/conversations
+// Deletes all conversations owned by caller.
+export async function DELETE() {
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const count = await deleteAllConversations(ctx);
+  return NextResponse.json({ ok: true, count });
+}
+

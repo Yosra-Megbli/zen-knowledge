@@ -106,17 +106,51 @@ export async function deleteConversation(ctx: AuthContext, conversationId: strin
   });
 }
 
+export async function deleteAllConversations(ctx: AuthContext): Promise<number> {
+  return withAuthContext(ctx, async (client) => {
+    await client.query(
+      `DELETE FROM feedback WHERE message_id IN
+         (SELECT id FROM conversation_messages WHERE conversation_id IN
+            (SELECT id FROM conversations WHERE user_id = $1 AND company_id = $2))`,
+      [ctx.userId, ctx.companyId]
+    );
+    await client.query(
+      `DELETE FROM citations WHERE message_id IN
+         (SELECT id FROM conversation_messages WHERE conversation_id IN
+            (SELECT id FROM conversations WHERE user_id = $1 AND company_id = $2))`,
+      [ctx.userId, ctx.companyId]
+    );
+    await client.query(
+      `DELETE FROM conversation_messages WHERE conversation_id IN
+         (SELECT id FROM conversations WHERE user_id = $1 AND company_id = $2)`,
+      [ctx.userId, ctx.companyId]
+    );
+    const res = await client.query(
+      `DELETE FROM conversations WHERE user_id = $1 AND company_id = $2`,
+      [ctx.userId, ctx.companyId]
+    );
+    return res.rowCount ?? 0;
+  });
+}
+
 // rating: 'useful' | 'not_useful' — matches the DB CHECK constraint.
+// Updates existing feedback if already cast for this message by the user, or inserts.
 export async function persistFeedback(
   ctx: AuthContext,
   messageId: string,
   rating: "useful" | "not_useful"
 ): Promise<void> {
-  await withAuthContext(ctx, (client) =>
-    client.query(
-      `INSERT INTO feedback (message_id, company_id, user_id, rating)
-       VALUES ($1, $2, $3, $4)`,
-      [messageId, ctx.companyId, ctx.userId, rating]
-    )
-  );
+  await withAuthContext(ctx, async (client) => {
+    const updated = await client.query(
+      `UPDATE feedback SET rating = $1 WHERE message_id = $2 AND user_id = $3`,
+      [rating, messageId, ctx.userId]
+    );
+    if ((updated.rowCount ?? 0) === 0) {
+      await client.query(
+        `INSERT INTO feedback (message_id, company_id, user_id, rating)
+         VALUES ($1, $2, $3, $4)`,
+        [messageId, ctx.companyId, ctx.userId, rating]
+      );
+    }
+  });
 }
