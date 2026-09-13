@@ -19,6 +19,7 @@ interface OverdueDoc {
   title: string;
   review_date: string;
   owner_email: string;
+  owner_name?: string | null;
   days_overdue: number;
   rt_status?: string | null;
   rt_notified_at?: string | null;
@@ -310,7 +311,9 @@ export default function AdminPage() {
             >
               <h2 className="font-medium text-amber-700 flex items-center gap-2">
                 <AlertTriangle size={15} strokeWidth={2} className="text-amber-500 shrink-0" />
-                {overdueDocuments.length.toLocaleString("fr-FR")} document{overdueDocuments.length > 1 ? "s" : ""} {overdueDocuments.length > 1 ? "dépassent" : "dépasse"} leur date de révision
+                {overdueDocuments.length > 1
+                  ? `${overdueDocuments.length.toLocaleString("fr-FR")} documents dépassent leur date de révision`
+                  : "1 document dépasse sa date de révision"}
               </h2>
               <ChevronDown
                 size={14}
@@ -325,7 +328,7 @@ export default function AdminPage() {
                       <th className="text-left px-5 py-3 font-medium text-ink-300">Titre</th>
                       <th className="text-left px-5 py-3 font-medium text-ink-300">Propriétaire</th>
                       <th className="text-left px-5 py-3 font-medium text-ink-300">Date de révision</th>
-                      <th className="text-left px-5 py-3 font-medium text-ink-300">Statut W3</th>
+                      <th className="text-left px-5 py-3 font-medium text-ink-300">Notification</th>
                       <th className="text-right px-5 py-3 font-medium text-ink-300">Retard (j.)</th>
                     </tr>
                   </thead>
@@ -342,7 +345,9 @@ export default function AdminPage() {
                             {doc.title}
                           </a>
                         </td>
-                        <td className="px-5 py-3 text-ink-500 text-xs">{doc.owner_email}</td>
+                        <td className="px-5 py-3 text-ink-500 text-xs" title={doc.owner_email}>
+                          {doc.owner_name || doc.owner_email}
+                        </td>
                         <td className="px-5 py-3">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
                             {new Date(doc.review_date).toLocaleDateString("fr-FR")} · Révision dépassée
@@ -352,20 +357,20 @@ export default function AdminPage() {
                           {doc.rt_status === "overdue" ? (
                             <span
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200"
-                              title={doc.rt_reminded_at ? `Rappel envoyé le ${new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")}` : "Rappel W3 envoyé"}
+                              title={doc.rt_reminded_at ? `Rappel envoyé le ${new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")}` : "Relance envoyée"}
                             >
-                              Rappel envoyé (W3)
+                              Relancé
                             </span>
                           ) : doc.rt_status === "warning" ? (
                             <span
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"
-                              title={doc.rt_notified_at ? `Notifié le ${new Date(doc.rt_notified_at).toLocaleDateString("fr-FR")}` : "Notification W3 envoyée"}
+                              title={doc.rt_notified_at ? `Notifié le ${new Date(doc.rt_notified_at).toLocaleDateString("fr-FR")}` : "Notification envoyée"}
                             >
-                              Notifié (W3)
+                              {doc.rt_notified_at ? `Notifié le ${new Date(doc.rt_notified_at).toLocaleDateString("fr-FR")}` : "Notifié"}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-paper-100 text-ink-400 border border-ink-100">
-                              En attente W3
+                              En attente
                             </span>
                           )}
                         </td>

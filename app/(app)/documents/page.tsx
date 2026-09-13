@@ -187,10 +187,6 @@ export default function DocumentsPage() {
     return result;
   }, [docs, search, statusFilter, visibilityFilter, companyFilter, departmentFilter, sortField, sortOrder]);
 
-  const statusOptions = useMemo(
-    () => Array.from(new Set(docs.map((d) => d.latest_status ?? d.status))).sort(),
-    [docs]
-  );
 
   const companyOptions = useMemo(
     () => Array.from(new Set(docs.map((d) => d.company_name).filter(Boolean) as string[])).sort(),
@@ -467,17 +463,8 @@ export default function DocumentsPage() {
             })}
           </div>
 
-          {/* Filters row: Statut, Visibilité, Société, Service */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <CustomSelect
-              id="status-filter"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: "all", label: "Tous les statuts" },
-                ...statusOptions.map((s) => ({ value: s, label: STATUS_LABELS[s] ?? s })),
-              ]}
-            />
+          {/* Filters row: Visibilité, Société, Service */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <CustomSelect
               id="visibility-filter"
               value={visibilityFilter}

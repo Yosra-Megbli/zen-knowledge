@@ -223,23 +223,250 @@ async function main() {
     console.log(`✓ Document en échec "${failedDocTitle}" existe déjà.`);
   }
 
-  // 7. Update Review Dates:
-  // J+15 date calculation:
+  // 7. Check / create dedicated published document with review_date = CURRENT_DATE + 15 days:
+  // "Procédure de traitement des réclamations VIP — Service Client"
   const now = new Date();
   const j15Date = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   console.log(`Date J+15 cible : ${j15Date}`);
 
-  // a) J+15 on "Politique de retour et remboursement produit"
+  const vipDocTitle = "Procédure de traitement des réclamations VIP — Service Client";
+  let vipDoc = (await api(`/documents?company_id=eq.${company.id}&title=eq.${encodeURIComponent(vipDocTitle)}&select=id,title,status,current_version_id,review_date`))[0];
+
+  const VIP_CONTENT = `# Procédure de traitement des réclamations VIP — Service Client
+Date d'effet : 2026-03-01
+Dernière révision : 2026-09-13
+Service responsable : Service Client
+
+## 1. Périmètre et éligibilité
+Cette procédure encadre le traitement prioritaire des réclamations émanant de clients titulaires d'une carte Fidélité VIP Platine, Grands Comptes institutionnels ou de litiges signalés en boutique d'un montant supérieur à 500 TND.
+
+## 2. Délais de réponse et SLA
+- Prise en charge initiale : sous 2 heures ouvrées après réception de la notification.
+- Proposition de résolution définitive : sous 24 heures ouvrées.
+- Attribution d'un interlocuteur dédié du Service Client dès l'ouverture du dossier.
+
+## 3. Modalités d'indemnisation et gestes commerciaux
+- Avoir immédiat en boutique ou remboursement sur carte bancaire jusqu'à 300 TND avec accord du superviseur Service Client.
+- Au-delà de 300 TND : validation conjointe requise avec la Direction Administrative et Financière.
+- Bon de fidélité ou cadeau de courtoisie systématique en cas de retard de livraison avéré supérieur à 72 heures.
+
+## 4. Escalade hiérarchique
+En l'absence de résolution sous 48 heures, le dossier est automatiquement transféré au Responsable de la Relation Client avec copie au Directeur des Opérations Réseau.`;
+
+  if (!vipDoc) {
+    console.log(`Création du document publié J+15 : "${vipDocTitle}"...`);
+    const docInserted = await api("/documents", {
+      method: "POST",
+      body: JSON.stringify({
+        company_id: company.id,
+        department_id: serviceClientDept.id,
+        owner_id: admin.id,
+        title: vipDocTitle,
+        description: "Processus accéléré de médiation, dédommagement et fidélisation pour les clients VIP et réclamations critiques.",
+        visibility: "company",
+        status: "published",
+        review_date: j15Date,
+      }),
+    });
+    vipDoc = docInserted[0];
+    console.log(`✓ Document créé : id ${vipDoc.id}`);
+
+    // Create version v1 published
+    const verInserted = await api("/document_versions", {
+      method: "POST",
+      body: JSON.stringify({
+        document_id: vipDoc.id,
+        company_id: company.id,
+        version_number: 1,
+        status: "published",
+        file_key: "pending",
+        file_type: "text/plain",
+        uploaded_by: admin.id,
+        published_at: new Date().toISOString(),
+      }),
+    });
+    const vipVersionId = verInserted[0].id;
+    console.log(`✓ Version créée : id ${vipVersionId}`);
+
+    // Upload content to Storage
+    const storageKey = `${company.id}/${vipDoc.id}/${vipVersionId}/reclamations_vip_service_client.txt`;
+    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${storageKey}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        "Content-Type": "text/plain; charset=utf-8",
+        "x-upsert": "true",
+      },
+      body: Buffer.from(VIP_CONTENT, "utf-8"),
+    });
+    if (!uploadRes.ok) {
+      console.warn(`Upload storage warning: ${uploadRes.status} ${await uploadRes.text()}`);
+    } else {
+      console.log(`✓ Fichier texte téléversé dans Supabase Storage : ${storageKey}`);
+    }
+
+    // Local mirror
+    try {
+      const localDir = path.join(__dirname, "..", "storage", company.id, vipDoc.id, vipVersionId);
+      mkdirSync(localDir, { recursive: true });
+      writeFileSync(path.join(localDir, "reclamations_vip_service_client.txt"), Buffer.from(VIP_CONTENT, "utf-8"));
+    } catch (e) {
+      console.warn("Local storage write warning:", e.message);
+    }
+
+    // Update version file_key
+    await api(`/document_versions?id=eq.${vipVersionId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ file_key: storageKey }),
+    });
+
+    // Update document current_version_id
+    await api(`/documents?id=eq.${vipDoc.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        current_version_id: vipVersionId,
+        review_date: j15Date,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+
+    // Insert successful ingestion job
+    await api("/ingestion_jobs", {
+      method: "POST",
+      body: JSON.stringify({
+        document_version_id: vipVersionId,
+        company_id: company.id,
+        status: "completed",
+        chunk_count: 2,
+        triggered_by: "demo-fixture",
+        started_at: new Date().toISOString(),
+        finished_at: new Date().toISOString(),
+      }),
+    });
+
+    // Insert chunks with 1536-dim zero embeddings
+    const zeroVector = `[${new Array(384).fill(0).join(",")}]`;
+    const chunksData = [
+      {
+        document_version_id: vipVersionId,
+        document_id: vipDoc.id,
+        company_id: company.id,
+        department_id: serviceClientDept.id,
+        visibility: "company",
+        document_status: "published",
+        version_status: "published",
+        chunk_index: 0,
+        content: "Procédure de traitement des réclamations VIP — Service Client. Périmètre : cartes VIP Platine, Grands Comptes, litiges > 500 TND. Prise en charge initiale sous 2 heures ouvrées, proposition de résolution sous 24 heures.",
+        page_number: 1,
+        embedding: zeroVector,
+      },
+      {
+        document_version_id: vipVersionId,
+        document_id: vipDoc.id,
+        company_id: company.id,
+        department_id: serviceClientDept.id,
+        visibility: "company",
+        document_status: "published",
+        version_status: "published",
+        chunk_index: 1,
+        content: "Modalités d'indemnisation réclamations VIP : avoir immédiat ou remboursement carte bancaire jusqu'à 300 TND avec accord superviseur. Au-delà : accord DAF requis. Escalade hiérarchique sous 48h.",
+        page_number: 1,
+        embedding: zeroVector,
+      },
+    ];
+
+    for (const chunk of chunksData) {
+      await api("/document_chunks", {
+        method: "POST",
+        body: JSON.stringify(chunk),
+      });
+    }
+    console.log(`✓ 2 chunks indexés créés pour "${vipDocTitle}"`);
+  } else {
+    // Ensure review_date is set to J+15
+    await api(`/documents?id=eq.${vipDoc.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        review_date: j15Date,
+        status: "published",
+        department_id: serviceClientDept.id,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    console.log(`✓ Document existant "${vipDocTitle}" vérifié (review_date = ${j15Date})`);
+
+    // Ensure chunks exist
+    const existingChunks = await api(`/document_chunks?document_id=eq.${vipDoc.id}&select=id`);
+    if (!existingChunks.length && vipDoc.current_version_id) {
+      console.log(`Création des chunks manquants pour "${vipDocTitle}"...`);
+      const zeroVector = `[${new Array(384).fill(0).join(",")}]`;
+      const chunksData = [
+        {
+          document_version_id: vipDoc.current_version_id,
+          document_id: vipDoc.id,
+          company_id: company.id,
+          department_id: serviceClientDept.id,
+          visibility: "company",
+          document_status: "published",
+          version_status: "published",
+          chunk_index: 0,
+          content: "Procédure de traitement des réclamations VIP — Service Client. Périmètre : cartes VIP Platine, Grands Comptes, litiges > 500 TND. Prise en charge initiale sous 2 heures ouvrées, proposition de résolution sous 24 heures.",
+          page_number: 1,
+          embedding: zeroVector,
+        },
+        {
+          document_version_id: vipDoc.current_version_id,
+          document_id: vipDoc.id,
+          company_id: company.id,
+          department_id: serviceClientDept.id,
+          visibility: "company",
+          document_status: "published",
+          version_status: "published",
+          chunk_index: 1,
+          content: "Modalités d'indemnisation réclamations VIP : avoir immédiat ou remboursement carte bancaire jusqu'à 300 TND avec accord superviseur. Au-delà : accord DAF requis. Escalade hiérarchique sous 48h.",
+          page_number: 1,
+          embedding: zeroVector,
+        },
+      ];
+
+      for (const chunk of chunksData) {
+        await api("/document_chunks", {
+          method: "POST",
+          body: JSON.stringify(chunk),
+        });
+      }
+      console.log(`✓ 2 chunks indexés créés pour "${vipDocTitle}"`);
+    }
+
+    // Ensure ingestion job exists
+    const existingJobs = await api(`/ingestion_jobs?document_version_id=eq.${vipDoc.current_version_id}&select=id`);
+    if (!existingJobs.length && vipDoc.current_version_id) {
+      await api("/ingestion_jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          document_version_id: vipDoc.current_version_id,
+          company_id: company.id,
+          status: "completed",
+          chunk_count: 2,
+          triggered_by: "demo-fixture",
+          started_at: new Date().toISOString(),
+          finished_at: new Date().toISOString(),
+        }),
+      });
+      console.log(`✓ Ingestion job completed créé pour "${vipDocTitle}"`);
+    }
+  }
+
+  // 8. Update 2-3 missing review dates with 2026-2027 dates
   const retourDoc = (await api(`/documents?company_id=eq.${company.id}&title=ilike.*retour%20et%20remboursement*&select=id,title`))[0];
   if (retourDoc) {
     await api(`/documents?id=eq.${retourDoc.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ review_date: j15Date, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ review_date: "2027-03-15", updated_at: new Date().toISOString() }),
     });
-    console.log(`✓ "${retourDoc.title}" -> review_date = ${j15Date} (J+15 pour 'À venir 30j')`);
+    console.log(`✓ "${retourDoc.title}" -> review_date = 2027-03-15`);
   }
 
-  // b) 2-3 other missing review dates:
   const intDoc = (await api(`/documents?company_id=eq.${company.id}&title=ilike.*int%C3%A9gration%20des%20nouveaux%20employ%C3%A9s*&select=id,title`))[0];
   if (intDoc) {
     await api(`/documents?id=eq.${intDoc.id}`, {

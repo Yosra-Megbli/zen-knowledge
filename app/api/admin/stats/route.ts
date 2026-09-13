@@ -35,6 +35,7 @@ export async function GET(request: Request) {
             d.title,
             d.review_date,
             u.email AS owner_email,
+            COALESCE(u.name, u.email) AS owner_name,
             (CURRENT_DATE - d.review_date::date)::int AS days_overdue,
             rt.status                                   AS rt_status,
             rt.notified_at                              AS rt_notified_at,
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
             d.title,
             d.review_date,
             u.email AS owner_email,
+            COALESCE(u.name, u.email) AS owner_name,
             (CURRENT_DATE - d.review_date::date)::int AS days_overdue,
             NULL::text                                  AS rt_status,
             NULL::timestamptz                           AS rt_notified_at,
@@ -132,7 +134,7 @@ export async function GET(request: Request) {
         // CURRENT_DATE used (not NOW()) because review_date is a date column,
         // not a timestamp — comparing with NOW() would do an implicit cast.
         // If review_tasks exists, LEFT JOIN surfaces the W3 notification state.
-        client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string; days_overdue: number; rt_status: string | null; rt_notified_at: string | null; rt_reminded_at: string | null }>(
+        client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string; owner_name: string; days_overdue: number; rt_status: string | null; rt_notified_at: string | null; rt_reminded_at: string | null }>(
           overdueQuery
         ).catch((err) => {
           captureError(err, { route: "admin/stats", query: "overdue" });

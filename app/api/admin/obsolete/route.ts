@@ -11,6 +11,7 @@ export interface ObsoleteDocRow {
   visibility: string;
   review_date: string;
   owner_email: string;
+  owner_name?: string | null;
   department_name: string | null;
   days_overdue: number;     // positive = overdue, negative = approaching (days until due)
   status: "overdue" | "approaching" | "unpublished";
@@ -71,6 +72,7 @@ export async function GET() {
           d.visibility,
           d.review_date::text                           AS review_date,
           u.email                                       AS owner_email,
+          COALESCE(u.name, u.email)                     AS owner_name,
           dep.name                                      AS department_name,
           (CURRENT_DATE - d.review_date::date)::int     AS days_overdue,
           CASE

@@ -34,6 +34,7 @@ env/
 
 # Local file storage (uploaded documents) — never committed
 .storage/
+storage/
 
 # Generated Supabase deployment SQL — contains the real app_role
 # password inline (needed to paste into Supabase SQL Editor as a

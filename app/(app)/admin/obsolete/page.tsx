@@ -25,6 +25,7 @@ export interface ObsoleteDoc {
   visibility: string;
   review_date: string;
   owner_email: string;
+  owner_name?: string | null;
   department_name: string | null;
   days_overdue: number;
   status: "overdue" | "approaching" | "unpublished";
@@ -121,12 +122,12 @@ function DocCard({
         {/* Metadata info */}
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-400 mb-3">
           <span>
-            <span className="font-medium text-ink-700">Date d&apos;échéance : </span>
+            <span className="font-medium text-ink-700">Date de révision : </span>
             {new Date(doc.review_date).toLocaleDateString("fr-FR")}
           </span>
           <span>
             <span className="font-medium text-ink-700">Propriétaire : </span>
-            {doc.owner_email}
+            {doc.owner_name || doc.owner_email}
           </span>
           {doc.department_name && (
             <span>
@@ -156,7 +157,7 @@ function DocCard({
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium bg-paper-100 text-ink-400 border border-ink-100">
-                  En attente de notification
+                  En attente
                 </span>
               )}
 
@@ -169,10 +170,10 @@ function DocCard({
                   }`}
                 >
                   <Send size={11} />
-                  Relances : {reminderCount}
+                  Relancé ({reminderCount}×)
                   {doc.rt_reminded_at && (
                     <span className="opacity-80 text-[11px]">
-                      ({new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")})
+                      · {new Date(doc.rt_reminded_at).toLocaleDateString("fr-FR")}
                     </span>
                   )}
                 </span>
@@ -440,7 +441,7 @@ export default function ObsoletePage() {
               Documents à réviser
             </h1>
             <p className="text-xs text-ink-400 mt-1">
-              Workflow W3 — Détection des documents obsolètes, notifications aux propriétaires et dépublication.
+              Détection des documents obsolètes, notifications aux propriétaires et dépublication.
             </p>
           </div>
           <button
@@ -491,7 +492,7 @@ export default function ObsoletePage() {
               <p className="text-3xl font-display font-bold text-amber-600">
                 {data.overdue.filter((d) => d.days_overdue >= 30).length}
               </p>
-              <p className="text-xs text-ink-400 mt-1 font-medium">Retard ≥ 30 j.</p>
+              <p className="text-xs text-ink-400 mt-1 font-medium">dont retard ≥ 30 j.</p>
             </div>
             <div className="bg-white border border-sky-200 rounded-2xl p-4 text-center">
               <p className="text-3xl font-display font-bold text-sky-600">
@@ -505,7 +506,7 @@ export default function ObsoletePage() {
               <p className="text-3xl font-display font-bold text-zinc-600">
                 {data.unpublished.length}
               </p>
-              <p className="text-xs text-ink-400 mt-1 font-medium">Dépubliés (W3)</p>
+              <p className="text-xs text-ink-400 mt-1 font-medium">Dépubliés</p>
             </div>
           </div>
 
@@ -580,7 +581,7 @@ export default function ObsoletePage() {
               <div className="flex items-center gap-2">
                 <EyeOff size={16} className="text-zinc-500 shrink-0" strokeWidth={2} />
                 <h2 className="font-semibold text-ink-900 text-lg">
-                  Documents dépubliés (W3)
+                  Documents dépubliés
                 </h2>
                 <span className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700">
                   {data.unpublished.length}
