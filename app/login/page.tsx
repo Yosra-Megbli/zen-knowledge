@@ -99,7 +99,7 @@ export default function LoginPage() {
                 type="button"
                 disabled={loading}
                 onClick={() => doLogin(q.email, DEMO_PASSWORD)}
-                className="flex items-center justify-between bg-white border border-ink-100 rounded-lg px-3 py-2 text-left text-xs hover:border-lime-400 hover:shadow-sm transition-all disabled:opacity-50"
+                className="flex items-center justify-between bg-white border border-ink-100 rounded-lg px-3 py-2.5 text-left text-xs hover:border-lime-400 hover:shadow-sm transition-all disabled:opacity-50"
               >
                 <span>
                   <span className="block font-semibold text-ink-950">{q.label}</span>

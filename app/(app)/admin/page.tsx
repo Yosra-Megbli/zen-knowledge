@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { CircleDollarSign, ThumbsUp, ThumbsDown, ShieldAlert, Coins, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle } from "lucide-react";
 
 interface ActivityRow {
@@ -264,6 +265,15 @@ export default function AdminPage() {
                 </table>
               </div>
             )}
+            {/* Link to dedicated view */}
+            <div className="px-5 py-3 border-t border-ink-100 flex justify-end">
+              <Link
+                href="/admin/obsolete"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-lime-700 hover:text-lime-900 transition-colors"
+              >
+                Vue complète (dépassés + à venir) →
+              </Link>
+            </div>
           </>
         )}
       </div>

@@ -537,7 +537,7 @@ function ChatPageInner() {
             <span className="inline-flex mb-5">
               <LogoMark className="w-12 h-12" />
             </span>
-            <p className="font-display text-4xl font-bold text-ink-950 mb-3 tracking-tight">Comment puis-je vous aider ?</p>
+            <p className="font-display text-2xl sm:text-4xl font-bold text-ink-950 mb-3 tracking-tight">Comment puis-je vous aider ?</p>
             <p className="text-sm text-ink-500 mb-8">
               Interrogez les documents autorisés de votre entreprise.
             </p>
