@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "../../../../lib/permissions/authContext.ts";
 import { withAuthContext } from "../../../../lib/db/withAuthContext.ts";
+import { captureError } from "../../../../lib/monitoring/logger.ts";
 
 export interface ObsoleteDocRow {
   id: string;
@@ -29,41 +30,52 @@ export interface ObsoleteDocRow {
 const APPROACHING_DAYS = 30;
 
 export async function GET() {
-  const ctx = await getAuthContext();
-  if (!ctx) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (ctx.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (ctx.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const data = await withAuthContext(ctx, async (client) => {
-    const rows = await client.query<ObsoleteDocRow>(`
-      SELECT
-        d.id,
-        v.id                                          AS version_id,
-        d.title,
-        d.description,
-        d.visibility,
-        d.review_date::text                           AS review_date,
-        u.email                                       AS owner_email,
-        dep.name                                      AS department_name,
-        (CURRENT_DATE - d.review_date::date)::int     AS days_overdue,
-        CASE
-          WHEN d.review_date::date < CURRENT_DATE      THEN 'overdue'
-          ELSE                                              'approaching'
-        END                                           AS status
-      FROM documents d
-      JOIN document_versions v ON v.document_id = d.id AND v.status = 'published'
-      JOIN users u              ON u.id = v.uploaded_by
-      LEFT JOIN departments dep ON dep.id = d.department_id
-      WHERE d.status = 'published'
-        AND d.review_date IS NOT NULL
-        AND d.review_date::date <= CURRENT_DATE + $1
-      ORDER BY d.review_date ASC
-    `, [APPROACHING_DAYS]);
+    const data = await withAuthContext(ctx, async (client) => {
+      const rows = await client.query<ObsoleteDocRow>(`
+        SELECT
+          d.id,
+          v.id                                          AS version_id,
+          d.title,
+          d.description,
+          d.visibility,
+          d.review_date::text                           AS review_date,
+          u.email                                       AS owner_email,
+          dep.name                                      AS department_name,
+          (CURRENT_DATE - d.review_date::date)::int     AS days_overdue,
+          CASE
+            WHEN d.review_date::date < CURRENT_DATE      THEN 'overdue'
+            ELSE                                              'approaching'
+          END                                           AS status
+        FROM documents d
+        JOIN document_versions v ON v.document_id = d.id AND v.status = 'published'
+        JOIN users u              ON u.id = v.uploaded_by
+        LEFT JOIN departments dep ON dep.id = d.department_id
+        WHERE d.status = 'published'
+          AND d.review_date IS NOT NULL
+          AND d.review_date::date <= (CURRENT_DATE + INTERVAL '30 days')::date
+        ORDER BY d.review_date ASC
+      `);
 
-    const overdue     = rows.rows.filter((r) => r.status === "overdue");
-    const approaching = rows.rows.filter((r) => r.status === "approaching");
+      const overdue     = rows.rows.filter((r) => r.status === "overdue");
+      const approaching = rows.rows.filter((r) => r.status === "approaching");
 
-    return { overdue, approaching, approachingDays: APPROACHING_DAYS };
-  });
+      return { overdue, approaching, approachingDays: APPROACHING_DAYS };
+    });
 
-  return NextResponse.json(data);
+    return NextResponse.json(data);
+  } catch (err) {
+    captureError(err, { route: "admin/obsolete" });
+    return NextResponse.json(
+      {
+        error: "Impossible de charger les documents à réviser.",
+        details: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 }
+    );
+  }
 }

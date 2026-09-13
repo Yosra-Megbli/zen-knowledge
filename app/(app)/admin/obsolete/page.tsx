@@ -182,7 +182,21 @@ export default function ObsoletePage() {
       )}
 
       {error && (
-        <div className="text-center text-red-500 py-10">{error}</div>
+        <div className="max-w-md mx-auto my-12 p-6 rounded-2xl bg-white border border-red-200 shadow-sm text-center">
+          <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle size={24} />
+          </div>
+          <h3 className="text-base font-semibold text-ink-900 mb-1">Impossible de charger les documents</h3>
+          <p className="text-sm text-ink-500 mb-6">{error}</p>
+          <button
+            type="button"
+            onClick={() => load()}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-lime-700 hover:bg-lime-800 rounded-lg transition-colors cursor-pointer"
+          >
+            <RefreshCw size={16} />
+            Réessayer
+          </button>
+        </div>
       )}
 
       {!loading && data && (
