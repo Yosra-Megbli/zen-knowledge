@@ -13,6 +13,9 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  RotateCcw,
+  Archive,
+  MoreHorizontal,
 } from "lucide-react";
 import { CustomSelect } from "../../components/CustomSelect.tsx";
 
@@ -84,8 +87,14 @@ export default function DocumentsPage() {
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
+
   const [showModal, setShowModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ versionId: string; title: string } | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<{ versionId: string; title: string } | null>(null);
+  const [kebabOpenId, setKebabOpenId] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
@@ -131,6 +140,16 @@ export default function DocumentsPage() {
       .then((data) => setDepartments(Array.isArray(data) ? data : []))
       .catch(() => setDepartments([]));
   }, [fetchDocs]);
+
+  // Quick filter status counts
+  const statusCounts = useMemo(() => {
+    return {
+      all: docs.length,
+      published: docs.filter((d) => (d.latest_status ?? d.status) === "published").length,
+      archived: docs.filter((d) => (d.latest_status ?? d.status) === "archived").length,
+      failed: docs.filter((d) => (d.latest_status ?? d.status) === "failed").length,
+    };
+  }, [docs]);
 
   const filteredDocs = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -203,12 +222,12 @@ export default function DocumentsPage() {
         <span>{label}</span>
         {isActive ? (
           sortOrder === "asc" ? (
-            <ArrowUp size={14} className="text-lime-700" />
+            <ArrowUp size={13} className="text-lime-700" />
           ) : (
-            <ArrowDown size={14} className="text-lime-700" />
+            <ArrowDown size={13} className="text-lime-700" />
           )
         ) : (
-          <ArrowUpDown size={14} className="text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <ArrowUpDown size={13} className="text-ink-300 opacity-0 group-hover:opacity-100 transition-opacity" />
         )}
       </button>
     );
@@ -293,8 +312,55 @@ export default function DocumentsPage() {
     }
   }
 
+  async function handleArchive(versionId: string, title: string) {
+    setConfirmArchive({ versionId, title });
+    setKebabOpenId(null);
+  }
+
+  async function confirmAndArchive() {
+    if (!confirmArchive) return;
+    const { versionId, title } = confirmArchive;
+    setConfirmArchive(null);
+    setArchivingId(versionId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/documents/${versionId}/archive`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}) as { error?: string });
+        showToast(data.error ?? "Erreur lors de l'archivage.", "error");
+      } else {
+        showToast(`Document « ${title} » archivé avec succès.`, "success");
+        await fetchDocs();
+      }
+    } catch {
+      showToast("Erreur réseau.", "error");
+    } finally {
+      setArchivingId(null);
+    }
+  }
+
+  async function handleUnarchive(versionId: string, title: string) {
+    setUnarchivingId(versionId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/documents/${versionId}/unarchive`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}) as { error?: string });
+        showToast(data.error ?? "Erreur lors de la réactivation.", "error");
+      } else {
+        showToast(`Document « ${title} » réactivé avec succès !`, "success");
+        await fetchDocs();
+      }
+    } catch {
+      showToast("Erreur réseau.", "error");
+    } finally {
+      setUnarchivingId(null);
+    }
+  }
+
   async function handleDelete(versionId: string, title: string) {
     setConfirmDelete({ versionId, title });
+    setKebabOpenId(null);
   }
 
   async function confirmAndDelete() {
@@ -320,7 +386,7 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
+    <div className="w-full max-w-7xl mx-auto px-4 md:px-6 py-8">
       {/* Toast feedback */}
       {toast && (
         <div
@@ -353,7 +419,7 @@ export default function DocumentsPage() {
             Bibliothèque de documents
           </h1>
           <p className="text-sm text-ink-500 mt-1">
-            Gestion du catalogue documentaire multi-sociétés, suivi d&apos;indexation et contrôle de publication.
+            Gestion du catalogue documentaire, statut d&apos;indexation et contrôle du cycle de vie.
           </p>
         </div>
         <button
@@ -373,6 +439,32 @@ export default function DocumentsPage() {
             placeholder="Rechercher un document par titre ou description…"
             className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs"
           />
+
+          {/* Quick status filter chips (Étape 2) */}
+          <div className="flex items-center gap-2 overflow-x-auto py-0.5 text-xs">
+            {[
+              { key: "all", label: `Tous (${statusCounts.all})` },
+              { key: "published", label: `Publiés (${statusCounts.published})` },
+              { key: "archived", label: `Archivés (${statusCounts.archived})` },
+              { key: "failed", label: `Échec (${statusCounts.failed})` },
+            ].map((chip) => {
+              const isActive = statusFilter === chip.key;
+              return (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={() => setStatusFilter(chip.key)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                    isActive
+                      ? "bg-lime-100 text-ink-950 border border-lime-400 font-semibold shadow-2xs"
+                      : "bg-white text-ink-600 border border-ink-100 hover:bg-paper-100 hover:border-ink-200"
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              );
+            })}
+          </div>
 
           {/* Filters row: Statut, Visibilité, Société, Service */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -455,15 +547,26 @@ export default function DocumentsPage() {
                 doc.status === "published" &&
                 doc.review_date != null &&
                 new Date(doc.review_date) < new Date();
+              const isArchived = statusKey === "archived";
+
               return (
-                <div key={doc.id} className="bg-white rounded-2xl border border-ink-100 p-4 space-y-3">
+                <div
+                  key={doc.id}
+                  className={`bg-white rounded-2xl border border-ink-100 p-4 space-y-3 ${
+                    isArchived ? "opacity-60 bg-paper-100/40" : ""
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-ink-950 text-sm">{doc.title}</p>
+                      <p className="font-semibold text-ink-950 text-sm truncate" title={doc.title}>
+                        {doc.title}
+                      </p>
                       {doc.description && (
-                        <p className="text-xs text-ink-400 truncate mt-0.5">{doc.description}</p>
+                        <p className="text-xs text-ink-400 truncate mt-0.5" title={doc.description}>
+                          {doc.description}
+                        </p>
                       )}
-                      <p className="text-xs text-ink-500 font-medium mt-1">
+                      <p className="text-xs text-ink-500 font-medium mt-1 truncate">
                         {doc.company_name ?? "ZEN Knowledge"} · {doc.department_name ?? "Groupe"}
                       </p>
                     </div>
@@ -481,17 +584,19 @@ export default function DocumentsPage() {
                   {doc.latest_status === "failed" && doc.latest_error_message && (
                     <div className="flex items-start gap-1.5 p-2 bg-red-50 text-red-700 rounded-lg text-xs border border-red-100">
                       <AlertCircle size={14} className="shrink-0 text-red-600 mt-0.5" />
-                      <span>{doc.latest_error_message}</span>
+                      <span className="truncate">{doc.latest_error_message}</span>
                     </div>
                   )}
 
                   {/* Meta row */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-400">
-                    <span className="font-medium text-ink-700">{doc.owner_name || doc.owner_email}</span>
+                    <span className="font-medium text-ink-700" title={doc.owner_email}>
+                      {doc.owner_name || doc.owner_email}
+                    </span>
                     {doc.latest_version && (
                       <span>
                         v{doc.latest_version}
-                        {doc.version_count > 1 && <span className="text-ink-300 ml-1">({doc.version_count} versions)</span>}
+                        {doc.version_count > 1 && <span className="text-ink-300 ml-1">({doc.version_count} v.)</span>}
                       </span>
                     )}
                     {doc.review_date && (
@@ -508,30 +613,37 @@ export default function DocumentsPage() {
                     )}
                   </div>
 
-                  {/* Actions */}
+                  {/* Actions Mobile */}
                   <div className="flex items-center gap-2 border-t border-ink-100 pt-3">
-                    {doc.latest_status === "ready" && doc.latest_version_id ? (
+                    {isArchived && doc.latest_version_id && (
+                      <button
+                        onClick={() => handleUnarchive(doc.latest_version_id!, doc.title)}
+                        disabled={unarchivingId === doc.latest_version_id}
+                        className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-lime-100 text-ink-950 border border-lime-300 flex items-center gap-1 cursor-pointer"
+                      >
+                        <RotateCcw size={13} />
+                        <span>Réactiver</span>
+                      </button>
+                    )}
+
+                    {doc.latest_status === "ready" && doc.latest_version_id && (
                       <button
                         onClick={() => handlePublish(doc.latest_version_id!)}
                         disabled={publishingId === doc.latest_version_id}
-                        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-lime-400 text-ink-950 hover:bg-lime-500 disabled:opacity-50 transition-colors"
+                        className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-lime-400 text-ink-950 hover:bg-lime-500 disabled:opacity-50 transition-colors"
                       >
-                        {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
+                        Publier
                       </button>
-                    ) : null}
+                    )}
 
                     {doc.latest_version_id && (
                       <button
                         onClick={() => handleRetry(doc.latest_version_id!)}
                         disabled={retryingId === doc.latest_version_id}
-                        className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-                          doc.latest_status === "failed"
-                            ? "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
-                            : "text-ink-600 hover:bg-paper-100"
-                        }`}
+                        className="p-1.5 text-ink-600 hover:bg-paper-100 rounded-lg cursor-pointer"
+                        title="Réindexer"
                       >
-                        <RefreshCw size={12} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
-                        <span>{retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}</span>
+                        <RefreshCw size={14} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
                       </button>
                     )}
 
@@ -540,17 +652,30 @@ export default function DocumentsPage() {
                         href={`/documents/${doc.latest_version_id}/preview`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs font-medium text-ink-600 hover:text-lime-700 transition-colors px-2 py-1.5"
+                        className="p-1.5 text-ink-600 hover:text-lime-700 rounded-lg cursor-pointer"
+                        title="Voir"
                       >
-                        Voir <ExternalLink size={12} strokeWidth={2} />
+                        <ExternalLink size={14} />
                       </a>
+                    )}
+
+                    {doc.status === "published" && doc.latest_version_id && (
+                      <button
+                        onClick={() => handleArchive(doc.latest_version_id!, doc.title)}
+                        disabled={archivingId === doc.latest_version_id}
+                        className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg cursor-pointer"
+                        title="Archiver"
+                      >
+                        <Archive size={14} />
+                      </button>
                     )}
 
                     {doc.latest_version_id && (
                       <button
                         onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
                         disabled={deletingId === doc.latest_version_id}
-                        className="text-xs font-medium text-ink-400 hover:text-red-600 disabled:opacity-50 transition-colors ml-auto p-1.5"
+                        className="p-1.5 text-ink-400 hover:text-red-600 rounded-lg transition-colors ml-auto cursor-pointer"
+                        title="Supprimer"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -561,213 +686,330 @@ export default function DocumentsPage() {
             })}
           </div>
 
-          {/* ── Desktop table (md+) ────────────────────────────────────── */}
-          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-paper-100 border-b border-ink-100">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      {renderSortHeader("title", "Titre")}
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      Société · Service
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      Visibilité
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      Statut
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      {renderSortHeader("version", "Version")}
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      Propriétaire
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      {renderSortHeader("review_date", "Révision")}
-                    </th>
-                    <th className="text-left px-4 py-3 font-medium text-ink-500">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-100">
-                  {filteredDocs.map((doc) => {
-                    const statusKey = doc.latest_status ?? doc.status;
-                    const isOverdue =
-                      doc.status === "published" &&
-                      doc.review_date != null &&
-                      new Date(doc.review_date) < new Date();
+          {/* ── Desktop table (md+) — 100% visible sans scroll à 1366px ── */}
+          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-visible shadow-2xs">
+            <table className="w-full text-sm table-fixed">
+              <colgroup>
+                <col className="w-[28%]" />
+                <col className="w-[18%]" />
+                <col className="w-[10%]" />
+                <col className="w-[12%]" />
+                <col className="w-[7%]" />
+                <col className="w-[11%]" />
+                <col className="w-[8%]" />
+                <col className="w-[6%]" />
+              </colgroup>
+              <thead className="bg-paper-100 border-b border-ink-100">
+                <tr>
+                  <th className="text-left px-3.5 py-3 font-medium text-ink-500">
+                    {renderSortHeader("title", "Titre")}
+                  </th>
+                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                    Société · Service
+                  </th>
+                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                    Visibilité
+                  </th>
+                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                    Statut
+                  </th>
+                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                    {renderSortHeader("version", "Version")}
+                  </th>
+                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                    Propriétaire
+                  </th>
+                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                    {renderSortHeader("review_date", "Révision")}
+                  </th>
+                  <th className="text-right px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-100">
+                {filteredDocs.map((doc) => {
+                  const statusKey = doc.latest_status ?? doc.status;
+                  const isOverdue =
+                    doc.status === "published" &&
+                    doc.review_date != null &&
+                    new Date(doc.review_date) < new Date();
+                  const isArchived = statusKey === "archived";
 
-                    return (
-                      <tr key={doc.id} className="hover:bg-paper-50 transition-colors">
-                        {/* Titre */}
-                        <td className="px-4 py-3">
-                          <p className="font-semibold text-ink-950">{doc.title}</p>
-                          {doc.description && (
-                            <p className="text-xs text-ink-400 truncate max-w-xs">{doc.description}</p>
-                          )}
-                        </td>
+                  return (
+                    <tr
+                      key={doc.id}
+                      className={`hover:bg-paper-50 transition-colors ${
+                        isArchived ? "opacity-60 bg-paper-100/40" : ""
+                      }`}
+                    >
+                      {/* Titre (max-w, 2 lignes max) */}
+                      <td className="px-3.5 py-2.5">
+                        <p className="font-semibold text-ink-950 truncate text-xs sm:text-sm" title={doc.title}>
+                          {doc.title}
+                        </p>
+                        {doc.description && (
+                          <p className="text-xs text-ink-400 truncate mt-0.5" title={doc.description}>
+                            {doc.description}
+                          </p>
+                        )}
+                      </td>
 
-                        {/* Société · Service */}
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="font-medium text-ink-900 text-xs">
-                              {doc.company_name ?? "—"}
-                            </span>
-                            <span className="text-[11px] text-ink-500">
-                              {doc.department_name ?? "Groupe (Général)"}
-                            </span>
-                          </div>
-                        </td>
+                      {/* Société · Service (2 lignes max) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="font-medium text-ink-900 text-xs truncate block" title={doc.company_name}>
+                          {doc.company_name ?? "—"}
+                        </span>
+                        <span
+                          className="text-[11px] text-ink-500 truncate block mt-0.5"
+                          title={doc.department_name ?? "Groupe (Général)"}
+                        >
+                          {doc.department_name ?? "Groupe (Général)"}
+                        </span>
+                      </td>
 
-                        {/* Visibilité */}
-                        <td className="px-4 py-3">
+                      {/* Visibilité */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"
+                          }`}
+                        >
+                          {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                        </span>
+                      </td>
+
+                      {/* Statut & Erreur */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="flex flex-col items-start gap-1">
                           <span
                             className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"
+                              STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"
                             }`}
                           >
-                            {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
+                            {STATUS_LABELS[statusKey] ?? statusKey}
                           </span>
-                        </td>
-
-                        {/* Statut & Erreur */}
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col items-start gap-1">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"
-                              }`}
+                          {doc.latest_status === "failed" && doc.latest_error_message && (
+                            <div
+                              className="flex items-center gap-1 text-[11px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 max-w-[140px]"
+                              title={doc.latest_error_message}
                             >
-                              {STATUS_LABELS[statusKey] ?? statusKey}
-                            </span>
-                            {doc.latest_status === "failed" && doc.latest_error_message && (
-                              <div
-                                className="flex items-center gap-1 text-[11px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 max-w-[180px]"
-                                title={doc.latest_error_message}
-                              >
-                                <AlertCircle size={11} className="shrink-0 text-red-500" />
-                                <span className="truncate">{doc.latest_error_message}</span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Version */}
-                        <td className="px-4 py-3 text-ink-600">
-                          {doc.latest_version ? `v${doc.latest_version}` : "—"}
-                          {doc.version_count > 1 && (
-                            <span className="text-xs text-ink-400 ml-1">({doc.version_count} v.)</span>
-                          )}
-                        </td>
-
-                        {/* Propriétaire */}
-                        <td className="px-4 py-3 text-xs">
-                          <div className="font-medium text-ink-900">{doc.owner_name || doc.owner_email}</div>
-                          {doc.owner_name && doc.owner_name !== doc.owner_email && (
-                            <div className="text-[11px] text-ink-400 truncate max-w-[130px]" title={doc.owner_email}>
-                              {doc.owner_email}
+                              <AlertCircle size={10} className="shrink-0 text-red-500" />
+                              <span className="truncate">{doc.latest_error_message}</span>
                             </div>
                           )}
-                        </td>
+                        </div>
+                      </td>
 
-                        {/* Date de révision */}
-                        <td className="px-4 py-3 text-xs">
-                          {doc.review_date ? (
-                            <span
-                              className={
-                                isOverdue
-                                  ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
-                                  : "text-ink-600"
-                              }
-                              title={isOverdue ? "Date de révision dépassée — voir W3 (obsolescence)" : undefined}
+                      {/* Version */}
+                      <td className="px-3 py-2.5 whitespace-nowrap text-ink-600 text-xs">
+                        {doc.latest_version ? `v${doc.latest_version}` : "—"}
+                        {doc.version_count > 1 && (
+                          <span className="text-[11px] text-ink-400 ml-1">({doc.version_count} v.)</span>
+                        )}
+                      </td>
+
+                      {/* Propriétaire (Nom seul, email en title) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap text-xs">
+                        <span
+                          className="font-medium text-ink-900 truncate block cursor-default"
+                          title={doc.owner_email}
+                        >
+                          {doc.owner_name || doc.owner_email}
+                        </span>
+                      </td>
+
+                      {/* Date de révision */}
+                      <td className="px-3 py-2.5 whitespace-nowrap text-xs">
+                        {doc.review_date ? (
+                          <span
+                            className={
+                              isOverdue
+                                ? "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
+                                : "text-ink-600"
+                            }
+                            title={isOverdue ? "Date de révision dépassée" : undefined}
+                          >
+                            {new Date(doc.review_date).toLocaleDateString("fr-FR")}
+                            {isOverdue && " · Dépassée"}
+                          </span>
+                        ) : (
+                          <span className="text-ink-400">—</span>
+                        )}
+                      </td>
+
+                      {/* Action (icônes avec tooltip + menu kebab ⋯) */}
+                      <td className="px-3 py-2.5 text-right relative">
+                        <div className="inline-flex items-center justify-end gap-1">
+                          {/* Prioritaire sur les archivés : Réactiver */}
+                          {isArchived && doc.latest_version_id && (
+                            <button
+                              type="button"
+                              onClick={() => handleUnarchive(doc.latest_version_id!, doc.title)}
+                              disabled={unarchivingId === doc.latest_version_id}
+                              className="p-1.5 text-lime-700 hover:bg-lime-50 rounded-lg border border-lime-300 transition-colors cursor-pointer"
+                              title="Réactiver ce document dans le RAG"
                             >
-                              {new Date(doc.review_date).toLocaleDateString("fr-FR")}
-                              {isOverdue && " · Dépassée"}
-                            </span>
-                          ) : (
-                            <span className="text-ink-400">—</span>
+                              <RotateCcw
+                                size={14}
+                                className={unarchivingId === doc.latest_version_id ? "animate-spin" : ""}
+                              />
+                            </button>
                           )}
-                        </td>
 
-                        {/* Actions */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            {doc.latest_status === "ready" && doc.latest_version_id && (
+                          {/* Publier si ready */}
+                          {doc.latest_status === "ready" && doc.latest_version_id && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublish(doc.latest_version_id!)}
+                              disabled={publishingId === doc.latest_version_id}
+                              className="p-1.5 text-lime-700 hover:bg-lime-50 rounded-lg border border-lime-300 transition-colors cursor-pointer"
+                              title="Publier ce document"
+                            >
+                              <CheckCircle2 size={14} />
+                            </button>
+                          )}
+
+                          {/* Réindexer icône si statut ≠ Publié */}
+                          {doc.latest_status === "failed" && doc.latest_version_id && (
+                            <button
+                              type="button"
+                              onClick={() => handleRetry(doc.latest_version_id!)}
+                              disabled={retryingId === doc.latest_version_id}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-colors cursor-pointer"
+                              title="Réindexer ce document"
+                            >
+                              <RefreshCw
+                                size={14}
+                                className={retryingId === doc.latest_version_id ? "animate-spin" : ""}
+                              />
+                            </button>
+                          )}
+
+                          {/* Voir (icône) */}
+                          {doc.latest_version_id && (
+                            <a
+                              href={`/documents/${doc.latest_version_id}/preview`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 text-ink-500 hover:text-lime-700 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
+                              title="Voir le document"
+                            >
+                              <ExternalLink size={14} strokeWidth={2} />
+                            </a>
+                          )}
+
+                          {/* Menu Kebab ⋯ */}
+                          {doc.latest_version_id && (
+                            <div className="relative inline-block text-left">
                               <button
-                                onClick={() => handlePublish(doc.latest_version_id!)}
-                                disabled={publishingId === doc.latest_version_id}
-                                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-lime-400 text-ink-950 hover:bg-lime-500 disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
-                                title="Publier ce document dans l'assistant RAG"
+                                type="button"
+                                onClick={() => setKebabOpenId(kebabOpenId === doc.id ? null : doc.id)}
+                                className="p-1.5 text-ink-400 hover:text-ink-950 hover:bg-paper-100 rounded-lg transition-colors cursor-pointer"
+                                title="Actions supplémentaires"
                               >
-                                {publishingId === doc.latest_version_id ? "Publication…" : "Publier"}
+                                <MoreHorizontal size={14} />
                               </button>
-                            )}
 
-                            {doc.latest_version_id && (
-                              <button
-                                onClick={() => handleRetry(doc.latest_version_id!)}
-                                disabled={retryingId === doc.latest_version_id}
-                                className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                                  doc.latest_status === "failed"
-                                    ? "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 shadow-2xs"
-                                    : "text-ink-600 hover:bg-paper-100 hover:text-ink-950"
-                                }`}
-                                title={doc.latest_status === "failed" ? "Relancer l'ingestion" : "Réindexer ce document"}
-                              >
-                                <RefreshCw size={12} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
-                                <span>{retryingId === doc.latest_version_id ? "Réindexation…" : "Réindexer"}</span>
-                              </button>
-                            )}
-
-                            {doc.latest_version_id && (
-                              <a
-                                href={`/documents/${doc.latest_version_id}/preview`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 text-ink-500 hover:text-lime-700 transition-colors rounded-lg hover:bg-paper-100"
-                                title="Voir le document"
-                              >
-                                <span>Voir</span>
-                                <ExternalLink size={12} strokeWidth={2} />
-                              </a>
-                            )}
-
-                            {doc.latest_version_id && (
-                              <button
-                                onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
-                                disabled={deletingId === doc.latest_version_id}
-                                className="p-1.5 text-ink-300 hover:text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors cursor-pointer"
-                                title="Supprimer ce document"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              {kebabOpenId === doc.id && (
+                                <div
+                                  className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-lg border border-ink-100 py-1 z-30 animate-in fade-in"
+                                  onMouseLeave={() => setKebabOpenId(null)}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setKebabOpenId(null);
+                                      handleRetry(doc.latest_version_id!);
+                                    }}
+                                    className="w-full px-3 py-1.5 text-left text-xs text-ink-700 hover:bg-paper-100 flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <RefreshCw size={12} />
+                                    <span>Réindexer</span>
+                                  </button>
+                                  {doc.status === "published" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleArchive(doc.latest_version_id!, doc.title)}
+                                      className="w-full px-3 py-1.5 text-left text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <Archive size={12} />
+                                      <span>Archiver</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setKebabOpenId(null);
+                                      handleDelete(doc.latest_version_id!, doc.title);
+                                    }}
+                                    className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-ink-50 cursor-pointer"
+                                  >
+                                    <Trash2 size={12} />
+                                    <span>Supprimer</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </>
+      )}
+
+      {/* Archive Confirmation Modal (Étape 3) */}
+      {confirmArchive && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-ink-100 space-y-4">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-amber-50 flex items-center justify-center shrink-0 text-amber-600">
+                <Archive size={22} strokeWidth={2} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-ink-950 text-base mb-1">
+                  Archiver « {confirmArchive.title} » ?
+                </h2>
+                <p className="text-sm text-ink-500 leading-relaxed">
+                  Ce document sera immédiatement exclu de la recherche et du chat RAG, mais conservé dans la bibliothèque.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(null)}
+                className="flex-1 border border-ink-100 rounded-xl py-2 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmAndArchive}
+                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl py-2 text-sm font-medium transition-colors cursor-pointer shadow-xs"
+              >
+                Archiver
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete Confirmation Modal */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-ink-100">
-            <div className="flex flex-col items-center text-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0 text-red-600">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 border border-ink-100 space-y-4">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center shrink-0 text-red-600">
                 <Trash2 size={22} strokeWidth={2} />
               </div>
               <div>
-                <h2 className="font-semibold text-ink-950 text-base mb-1.5">
+                <h2 className="font-semibold text-ink-950 text-base mb-1">
                   Supprimer « {confirmDelete.title} » ?
                 </h2>
                 <p className="text-sm text-ink-500 leading-relaxed">
@@ -775,7 +1017,7 @@ export default function DocumentsPage() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+            <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setConfirmDelete(null)}

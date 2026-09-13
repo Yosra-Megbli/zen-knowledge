@@ -14,11 +14,11 @@ export async function republishDocument(
 ): Promise<{ documentVersionId: string }> {
   return withAuthContext(ctx, async (client) => {
     const docRes = await client.query<{ id: string; current_version_id: string | null }>(
-      `SELECT id, current_version_id FROM documents WHERE id = $1 AND status = 'unpublished'`,
+      `SELECT id, current_version_id FROM documents WHERE id = $1 AND status IN ('unpublished', 'archived')`,
       [documentId]
     );
     if (docRes.rowCount === 0) {
-      throw new IngestionNotFoundError("Document not found or not in unpublished status.");
+      throw new IngestionNotFoundError("Document not found or not in unpublished/archived status.");
     }
     const currentVersionId = docRes.rows[0].current_version_id;
 

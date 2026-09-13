@@ -71,38 +71,23 @@ export default function LoginPage() {
           aria-hidden="true"
         />
 
-        {/* Top Header / Eyebrow */}
+        {/* Top Header */}
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-6 sm:mb-8">
+          <div className="flex items-center gap-3">
             <LogoMark className="w-9 h-9 sm:w-10 sm:h-10" />
             <span className="font-display font-semibold text-lg sm:text-xl tracking-tight text-white">
               ZEN Knowledge
             </span>
           </div>
-          <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-ink-300 mb-4 sm:mb-6">
-            ZEN GROUP — RECRUTEMENT 2026
-          </div>
         </div>
 
-        {/* Center Headline & Subtitle */}
-        <div className="relative z-10 py-4 sm:py-8 lg:py-12 my-auto">
-          <h1 className="font-display text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-none space-y-1 sm:space-y-2">
-            <span className="block text-white">Centralisez.</span>
-            <span className="block text-white">Cherchez.</span>
-            <span className="block text-lime-400 font-extrabold">Répondez.</span>
+        {/* Center Headline */}
+        <div className="relative z-10 py-6 sm:py-12 lg:py-16 my-auto">
+          <h1 className="font-display text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight space-y-1 sm:space-y-2">
+            <span className="block text-white">Plateforme RAG</span>
+            <span className="block text-white">interne</span>
+            <span className="block text-lime-400 font-extrabold">multi-entreprises</span>
           </h1>
-          <p className="text-xs sm:text-sm lg:text-base text-ink-300 mt-4 sm:mt-6 leading-relaxed max-w-md">
-            Une réponse sourcée, jamais au-delà des documents autorisés. RAG multi-sociétés avec isolation stricte des données et vérification d&apos;obsolescence.
-          </p>
-        </div>
-
-        {/* Bottom Meta */}
-        <div className="relative z-10 pt-4 border-t border-ink-800/60 hidden sm:flex items-center justify-between text-xs text-ink-500 font-mono">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-lime-400 animate-pulse" />
-            <span>Test ouvert — ZG / 26</span>
-          </div>
-          <span>Confidentialité & RLS garanties</span>
         </div>
       </div>
 
@@ -254,10 +239,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Discreet Footer */}
-          <p className="text-center text-[11px] text-ink-500 pt-4 border-t border-ink-800/80">
-            ZEN Group — Recrutement 2026 · Fullstack AI / Automation
-          </p>
         </div>
       </div>
     </div>

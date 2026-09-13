@@ -74,7 +74,8 @@ export default function AdminPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [refusalsOpen, setRefusalsOpen] = useState(true);
+  const [refusalsExpanded, setRefusalsExpanded] = useState(false);
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const [overdueOpen, setOverdueOpen] = useState(true);
   const [activityPage, setActivityPage] = useState(1);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -192,7 +193,8 @@ export default function AdminPage() {
           <>
             <button
               type="button"
-              onClick={() => setRefusalsOpen((v) => !v)}
+              onClick={() => setRefusalsExpanded((v) => !v)}
+              aria-expanded={refusalsExpanded}
               className="w-full px-5 py-4 border-b border-ink-100 flex items-center justify-between text-left hover:bg-paper-50 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3">
@@ -200,8 +202,11 @@ export default function AdminPage() {
                   <SearchX size={16} strokeWidth={2} />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-ink-900 text-sm">
-                    Questions sans résultat (refus récents)
+                  <h2 className="font-semibold text-ink-900 text-sm flex items-center gap-2">
+                    <span>Questions sans résultat (refus récents)</span>
+                    <span className="text-xs font-normal text-ink-400">
+                      ({refusals.length.toLocaleString("fr-FR")})
+                    </span>
                   </h2>
                   <p className="text-xs text-ink-400 mt-0.5">
                     Requêtes restées sans source documentaire · Textes masqués par politique de confidentialité (RGPD)
@@ -214,55 +219,74 @@ export default function AdminPage() {
                 </span>
                 <ChevronDown
                   size={15}
-                  className={`text-ink-400 transition-transform ${refusalsOpen ? "rotate-180" : ""}`}
+                  className={`text-ink-400 transition-transform duration-200 ease-in-out ${refusalsExpanded ? "rotate-180" : ""}`}
                 />
               </div>
             </button>
-            {refusalsOpen && (
-              <ul className="divide-y divide-ink-100/70">
-                {refusals.map((r, i) => {
-                  const typeLabel =
-                    r.question_length < 20
-                      ? "Requête concise"
-                      : r.question_length <= 50
-                      ? "Requête standard"
-                      : "Requête détaillée";
-                  return (
-                    <li
-                      key={i}
-                      className="px-5 py-3.5 flex items-center justify-between gap-4 text-sm hover:bg-amber-50/20 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="font-medium text-ink-800 text-xs sm:text-sm truncate">
-                            {typeLabel}
-                            <span className="text-ink-400 font-normal ml-2 text-xs">
-                              ({r.question_length.toLocaleString("fr-FR")} caractères)
-                            </span>
-                          </p>
-                          <p className="text-[11px] text-ink-400 flex items-center gap-1.5 mt-0.5">
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-300" />
-                            Seuil de similarité non atteint · LLM non sollicité
-                          </p>
-                        </div>
+            <ul className="divide-y divide-ink-100/70">
+              {(refusalsExpanded ? refusals : refusals.slice(0, 3)).map((r, i) => {
+                const typeLabel =
+                  r.question_length < 20
+                    ? "Requête concise"
+                    : r.question_length <= 50
+                    ? "Requête standard"
+                    : "Requête détaillée";
+                return (
+                  <li
+                    key={i}
+                    className="px-5 py-3.5 flex items-center justify-between gap-4 text-sm hover:bg-amber-50/20 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium text-ink-800 text-xs sm:text-sm truncate">
+                          {typeLabel}
+                          <span className="text-ink-400 font-normal ml-2 text-xs">
+                            ({r.question_length.toLocaleString("fr-FR")} caractères)
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-ink-400 flex items-center gap-1.5 mt-0.5">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-300" />
+                          Seuil de similarité non atteint · LLM non sollicité
+                        </p>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0 text-right">
-                        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-paper-100 text-ink-500 border border-ink-100">
-                          Sans source
-                        </span>
-                        <span
-                          className="text-xs text-ink-400 flex items-center gap-1"
-                          title={new Date(r.created_at).toLocaleString("fr-FR")}
-                        >
-                          <Clock size={12} className="text-ink-300" />
-                          {relativeTime(r.created_at)}
-                        </span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 text-right">
+                      <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-paper-100 text-ink-500 border border-ink-100">
+                        Sans source
+                      </span>
+                      <span
+                        className="text-xs text-ink-400 flex items-center gap-1"
+                        title={new Date(r.created_at).toLocaleString("fr-FR")}
+                      >
+                        <Clock size={12} className="text-ink-300" />
+                        {relativeTime(r.created_at)}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            {refusals.length > 3 && (
+              <div className="px-5 py-2.5 bg-paper-50/60 border-t border-ink-100/70 text-center">
+                <button
+                  type="button"
+                  onClick={() => setRefusalsExpanded((v) => !v)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-600 hover:text-ink-950 transition-colors cursor-pointer py-1"
+                >
+                  {refusalsExpanded ? (
+                    <>
+                      Réduire
+                      <ChevronDown size={14} className="rotate-180 transition-transform duration-200" />
+                    </>
+                  ) : (
+                    <>
+                      Voir tout ({refusals.length.toLocaleString("fr-FR")})
+                      <ChevronDown size={14} className="transition-transform duration-200" />
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </>
         )}
@@ -368,81 +392,133 @@ export default function AdminPage() {
       </div>
 
       {/* Activité récente */}
-      <div className={`bg-white rounded-2xl border border-ink-100 overflow-hidden ${activityLoading ? "opacity-60" : ""}`}>
-        <div className="px-5 py-4 border-b border-ink-100 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <h2 className="font-medium text-ink-700">Activité récente</h2>
-            <a
-              href="/api/admin/audit?format=csv"
-              download
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-ink-900 bg-paper-100 hover:bg-paper-200 border border-ink-100 px-2.5 py-1 rounded-lg transition-colors"
-              title="Télécharger l'historique complet des logs d'audit au format CSV"
-            >
-              <Download size={13} />
-              Export CSV
-            </a>
+      <div className={`bg-white rounded-2xl border border-ink-100 overflow-hidden shadow-xs ${activityLoading ? "opacity-60" : ""}`}>
+        {recent.rows.length === 0 ? (
+          <div className="px-5 py-4 flex items-center gap-2 text-sm text-ink-500">
+            <CheckCircle2 size={16} className="text-lime-600" />
+            Aucune activité enregistrée pour le moment.
           </div>
-          <span className="sm:hidden text-xs text-ink-300 italic shrink-0">← Faites glisser pour voir plus →</span>
-        </div>
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-[600px] text-sm">
-          <thead className="bg-paper-100 border-b border-ink-100">
-            <tr>
-              <th className="text-left px-5 py-3 font-medium text-ink-300">Action</th>
-              <th className="text-left px-5 py-3 font-medium text-ink-300">Modèle</th>
-              <th className="text-left px-5 py-3 font-medium text-ink-300">Latence</th>
-              <th className="text-left px-5 py-3 font-medium text-ink-300">Document principal</th>
-              <th className="text-left px-5 py-3 font-medium text-ink-300">Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink-100">
-            {recent.rows.map((r, i) => {
-              const a = ACTION_LABELS[r.action] ?? { label: r.action, color: "bg-ink-100 text-ink-500" };
-              return (
-                <tr key={i} className="hover:bg-paper-100">
-                  <td className="px-5 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${a.color}`}>{a.label}</span>
-                  </td>
-                  <td className="px-5 py-3 text-ink-500 text-xs">{shortModelName(r.model)}</td>
-                  <td className={`px-5 py-3 text-xs ${r.latency_ms != null && r.latency_ms > 2000 ? "text-orange-600 font-medium" : "text-ink-500"}`}>
-                    {r.latency_ms ? `${(r.latency_ms / 1000).toFixed(1)}s` : "—"}
-                  </td>
-                  <td className="px-5 py-3 text-ink-500 max-w-[220px] truncate" title={r.main_document_title ?? undefined}>
-                    {r.main_document_title
-                      ? `${r.main_document_title}${r.source_count > 1 ? ` (+${r.source_count - 1})` : ""}`
-                      : "—"}
-                  </td>
-                  <td
-                    className="px-5 py-3 text-ink-300 text-xs"
-                    title={new Date(r.created_at).toLocaleString("fr-FR")}
+        ) : (
+          <>
+            <div className="border-b border-ink-100 flex items-center justify-between gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setActivityExpanded((v) => !v)}
+                aria-expanded={activityExpanded}
+                className="flex-1 px-5 py-4 flex items-center justify-between text-left hover:bg-paper-50 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <h2 className="font-medium text-ink-700 flex items-center gap-2">
+                    <span>Activité récente</span>
+                    <span className="text-xs font-normal text-ink-400">
+                      ({recent.rows.length.toLocaleString("fr-FR")})
+                    </span>
+                  </h2>
+                </div>
+                <ChevronDown
+                  size={15}
+                  className={`text-ink-400 transition-transform duration-200 ease-in-out ${activityExpanded ? "rotate-180" : ""}`}
+                />
+              </button>
+              <div className="px-5 py-2 sm:py-0 flex items-center gap-2">
+                <a
+                  href="/api/admin/audit?format=csv"
+                  download
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-500 hover:text-ink-900 bg-paper-100 hover:bg-paper-200 border border-ink-100 px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                  title="Télécharger l'historique complet des logs d'audit au format CSV"
+                >
+                  <Download size={13} />
+                  Export CSV
+                </a>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px] text-sm">
+                <thead className="bg-paper-100 border-b border-ink-100">
+                  <tr>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Action</th>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Modèle</th>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Latence</th>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Document principal</th>
+                    <th className="text-left px-5 py-3 font-medium text-ink-300">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {(activityExpanded ? recent.rows : recent.rows.slice(0, 3)).map((r, i) => {
+                    const a = ACTION_LABELS[r.action] ?? { label: r.action, color: "bg-ink-100 text-ink-500" };
+                    return (
+                      <tr key={i} className="hover:bg-paper-100">
+                        <td className="px-5 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${a.color}`}>{a.label}</span>
+                        </td>
+                        <td className="px-5 py-3 text-ink-500 text-xs">{shortModelName(r.model)}</td>
+                        <td className={`px-5 py-3 text-xs ${r.latency_ms != null && r.latency_ms > 2000 ? "text-orange-600 font-medium" : "text-ink-500"}`}>
+                          {r.latency_ms ? `${(r.latency_ms / 1000).toFixed(1)}s` : "—"}
+                        </td>
+                        <td className="px-5 py-3 text-ink-500 max-w-[220px] truncate" title={r.main_document_title ?? undefined}>
+                          {r.main_document_title
+                            ? `${r.main_document_title}${r.source_count > 1 ? ` (+${r.source_count - 1})` : ""}`
+                            : "—"}
+                        </td>
+                        <td
+                          className="px-5 py-3 text-ink-300 text-xs"
+                          title={new Date(r.created_at).toLocaleString("fr-FR")}
+                        >
+                          {relativeTime(r.created_at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {activityExpanded ? (
+              <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between flex-wrap gap-2">
+                <button
+                  onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
+                  disabled={recent.page <= 1 || activityLoading}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 disabled:opacity-30 disabled:hover:text-ink-500 transition-colors cursor-pointer"
+                >
+                  <ChevronLeft size={14} strokeWidth={2} />
+                  Précédent
+                </button>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-ink-300">Page {recent.page.toLocaleString("fr-FR")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setActivityExpanded(false)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-ink-600 hover:text-ink-950 transition-colors cursor-pointer"
                   >
-                    {relativeTime(r.created_at)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        </div>
-        <div className="px-5 py-3 border-t border-ink-100 flex items-center justify-between">
-          <button
-            onClick={() => setActivityPage((p) => Math.max(1, p - 1))}
-            disabled={recent.page <= 1 || activityLoading}
-            className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 disabled:opacity-30 disabled:hover:text-ink-500 transition-colors"
-          >
-            <ChevronLeft size={14} strokeWidth={2} />
-            Précédent
-          </button>
-          <span className="text-xs text-ink-300">Page {recent.page.toLocaleString("fr-FR")}</span>
-          <button
-            onClick={() => setActivityPage((p) => p + 1)}
-            disabled={!recent.hasNextPage || activityLoading}
-            className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 disabled:opacity-30 disabled:hover:text-ink-500 transition-colors"
-          >
-            Suivant
-            <ChevronRight size={14} strokeWidth={2} />
-          </button>
-        </div>
+                    Réduire
+                    <ChevronDown size={14} className="rotate-180 transition-transform duration-200" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => setActivityPage((p) => p + 1)}
+                  disabled={!recent.hasNextPage || activityLoading}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-ink-500 hover:text-lime-700 disabled:opacity-30 disabled:hover:text-ink-500 transition-colors cursor-pointer"
+                >
+                  Suivant
+                  <ChevronRight size={14} strokeWidth={2} />
+                </button>
+              </div>
+            ) : recent.rows.length > 3 ? (
+              <div className="px-5 py-2.5 bg-paper-50/60 border-t border-ink-100/70 text-center">
+                <button
+                  type="button"
+                  onClick={() => setActivityExpanded(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-600 hover:text-ink-950 transition-colors cursor-pointer py-1"
+                >
+                  Voir tout ({recent.rows.length.toLocaleString("fr-FR")})
+                  <ChevronDown size={14} className="transition-transform duration-200" />
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );
