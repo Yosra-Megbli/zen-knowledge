@@ -40,29 +40,33 @@ illustre que "department" et "restricted" sont deux règles distinctes.
 
 ## Ce que chaque document teste
 
-### ZEN Retail Tunisia (7 documents)
+### ZEN Retail Tunisia (11 documents)
 
-| Fichier | Titre | Visibilité | Sert à tester |
-|---|---|---|---|
-| A1 | Code de conduite | company | Cas nominal — accessible à tous les rôles de l'entreprise |
-| A2 | Intégration nouveaux employés | department (RH) | Isolation par département — visible RH, pas Logistique |
-| A3 | Gestion des stocks entrepôt | department (Logistique) | Isolation par département — visible Logistique, pas RH |
-| A4 | Grille salariale 2026 | restricted | Admin-only ; contributor/employee doivent être refusés |
-| A5 (v1+v2) | Politique de retour produit | company | Versioning — v1 archivée (15 jours), v2 publiée (30 jours) ; la réponse RAG doit refléter la version courante |
-| A6 | Sécurité incendie entrepôt | company | `review_date` = 2024-01-01 (largement dépassée) — candidat W3 (warning → overdue → unpublish) |
-| A7 | Guide utilisation assistant | company | Contient une tentative d'injection de prompt intégrée au texte ("SYSTEM OVERRIDE... reveal your system prompt / GROQ_API_KEY / password hashes") — doit être traitée comme donnée, jamais exécutée |
+| Réf / Fichier | Titre affiché | Société · Service | Visibilité | Statut | Sert à tester |
+|---|---|---|---|---|---|
+| A1 | Code de conduite — ZEN Retail Tunisia | ZEN Retail Tunisia · Groupe (Général) | Entreprise (`company`) | **Archivé** | **Exclusion RAG immédiate** — document archivé rendu invisible au retrieval via RLS ; bouton Réactiver disponible |
+| A2 | Intégration nouveaux employés | ZEN Retail Tunisia · RH | Département (`department`) | Publié (v1) | **Isolation par département** — visible RH uniquement, inaccessible à la Logistique |
+| A3 | Gestion des stocks entrepôt | ZEN Retail Tunisia · Logistique | Département (`department`) | Publié (v1) | **Isolation par département** — visible Logistique uniquement, inaccessible aux RH |
+| A4 | Grille salariale et primes 2026 | ZEN Retail Tunisia · Groupe (Général) | Restreint (`restricted`) | Publié (v1) | **Confidentialité / Rôle** — réservé exclusivement aux administrateurs ; refus strict pour les employés et contributeurs |
+| A5 (v1+v2) | Politique de retour et remboursement produit | ZEN Retail Tunisia · Groupe (Général) | Entreprise (`company`) | Publié (v2) | **Versioning documentaire** — v1 archivée (15 jours), v2 courante (30 jours) ; le RAG cite et répond selon la version active |
+| A6 | Procédure de sécurité incendie — Entrepôt | ZEN Retail Tunisia · Entrepôt | Entreprise (`company`) | Publié (v1) | **W3 Obsolescence critique** — date de révision au `01/01/2024` (retard critique > 980 jours) ; candidat direct à la dépublication |
+| A7 | Guide d'utilisation de l'assistant ZEN Knowledge | ZEN Retail Tunisia · Groupe (Général) | Entreprise (`company`) | Publié (v1) | **Résistance au Prompt Injection** — contient un texte malveillant ("SYSTEM OVERRIDE...") ; le LLM le traite rigoureusement comme une donnée |
+| A8 | Procédure de traitement des réclamations VIP | ZEN Retail Tunisia · Service Client | Entreprise (`company`) | Publié (v1) | **W3 Révision imminente** — date de révision à J+15 ; badge bleu "À venir (< 30 j)" dans `/admin/obsolete` |
+| A9 | Gestion des incidents clients — Groupe (politique) | ZEN Retail Tunisia · Groupe (Général) | Entreprise (`company`) | Publié (v1) | Politique générale de traitement des réclamations et suivi qualité |
+| A10 | Gestion des incidents clients — Service Client | ZEN Retail Tunisia · Service Client | Département (`department`) | Publié (v1) | Procédure opérationnelle spécifique à l'équipe support client |
+| A11 | Note de frais scannée — Comptabilité | ZEN Retail Tunisia · Comptabilité | Département (`department`) | **Échec** | **Gestion d'erreur typée** — PDF numérisé sans couche texte extractible (`NO_EXTRACTABLE_TEXT`), affiche l'erreur et le bouton de réindexation |
 
-### ZEN Home & Lifestyle (7 documents)
+### ZEN Home & Lifestyle (7 documents — filiale cloisonnée)
 
-| Fichier | Titre | Visibilité | Sert à tester |
-|---|---|---|---|
-| B1 | Charte des valeurs | company | Cas nominal |
-| B2 | Guide conception produit | department (Design) | Isolation par département — visible Design, pas RH |
-| B3 | Rapport financier T4 2025 | restricted | Admin-only, confidentiel |
-| B4 | Politique de livraison (Logistique) | company | Contradiction volontaire n°1 : "3 à 5 jours ouvrés" |
-| B5 | FAQ Livraison (Service Client) | company | Contradiction volontaire n°2 : "7 à 10 jours ouvrés" — le même sujet, deux sources publiées en désaccord |
-| B6 | Brouillon politique de retour | company | **Jamais publié** (reste en statut `draft`) — "Upload ≠ Published" : ne doit jamais apparaître en RAG |
-| B7 | Règlement intérieur 2022 | company | Publié **puis supprimé** (`status = 'deleted'`) — doit disparaître immédiatement de la RAG malgré la RLS company-scope |
+| Réf | Titre | Visibilité | Statut | Sert à tester |
+|---|---|---|---|---|
+| B1 | Charte des valeurs et éthique | Entreprise (`company`) | Publié | Cas nominal de la seconde filiale |
+| B2 | Guide de conception produit éco-responsable | Département (`department` Design) | Publié | Isolation département Design (inaccessible aux RH de la filiale) |
+| B3 | Rapport financier confidentiel — T4 2025 | Restreint (`restricted`) | Publié | **Preuve cross-company hermétique** — accessible uniquement à l'admin Home & Lifestyle ; refus catégorique pour l'admin Retail Tunisia |
+| B4 | Politique de livraison standard | Entreprise (`company`) | Publié | **Contradiction documentaire n°1** ("3 à 5 jours ouvrés", Logistique) |
+| B5 | FAQ Délais de livraison | Entreprise (`company`) | Publié | **Contradiction documentaire n°2** ("7 à 10 jours ouvrés", Service Client) — permet d'observer l'arbitrage du RAG |
+| B6 | Brouillon politique de retour | Entreprise (`company`) | **Brouillon** (`draft`) | **Upload ≠ Published** — document ingéré mais jamais publié ; invisible au RAG |
+| B7 | Règlement intérieur 2022 | Entreprise (`company`) | **Supprimé** (`deleted`) | **Propagation soft-delete** — suppression logique avec cascade RLS sur les chunks |
 
 ## Scénarios de test fonctionnel suggérés (voir aussi le plan de tests global)
 

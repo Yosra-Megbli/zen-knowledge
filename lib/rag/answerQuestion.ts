@@ -53,7 +53,7 @@ export interface RagRefusal {
 export type RagResult = RagAnswer | RagRefusal;
 
 export const REFUSAL_MESSAGE =
-  "I don't have enough authorized sources to answer this question.";
+  "Je n'ai pas de sources autorisées suffisantes pour répondre à cette question.";
 
 /**
  * The single entry point for RAG generation. Security invariants:

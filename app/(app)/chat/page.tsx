@@ -79,6 +79,45 @@ function groupConversationsByDate(items: ConversationSummary[]): { label: string
   ].filter((g) => g.items.length > 0);
 }
 
+// Extract up to 3 meaningful keyword terms (> 3 letters, excluding common stop words)
+function getQuestionKeywords(question?: string): string[] {
+  if (!question) return [];
+  const stopWords = new Set([
+    "quel", "quelle", "quels", "quelles", "dans", "pour", "avec", "sont",
+    "cette", "plus", "tout", "tous", "toute", "toutes", "faire", "comme",
+    "leur", "leurs", "nous", "vous", "elles", "mais", "comment", "quand",
+    "pourquoi", "est-ce", "avez", "avoir", "etre", "peut", "peux",
+    "votre", "vos", "notre", "nos"
+  ]);
+  const words = question
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !stopWords.has(w));
+  return Array.from(new Set(words)).slice(0, 3);
+}
+
+// Highlights key terms within snippet text
+function renderHighlightedSnippet(text: string, keywords: string[]) {
+  if (!keywords.length) return text;
+  const escaped = keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const regex = new RegExp(`(${escaped.join("|")})`, "gi");
+  const parts = text.split(regex);
+  return parts.map((part, idx) => {
+    if (keywords.some((k) => k.toLowerCase() === part.toLowerCase())) {
+      return (
+        <mark
+          key={idx}
+          className="bg-lime-200/90 text-ink-950 font-semibold px-1 py-0.5 rounded not-italic"
+        >
+          {part}
+        </mark>
+      );
+    }
+    return part;
+  });
+}
+
 const SUGGESTIONS: { icon: LucideIcon; label: string; question: string; restrictedToAdmin?: boolean }[] = [
   { icon: Package, label: "Politique produit", question: "Quel est le délai de retour produit ?" },
   { icon: Users, label: "RH", question: "Quelle est la procédure d'intégration des nouveaux employés ?" },
@@ -107,6 +146,7 @@ function ChatPageInner() {
   const [loading, setLoading] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState<"retrieving" | "generating">("retrieving");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedSnippets, setExpandedSnippets] = useState<Record<string, boolean>>({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [deletingConversationId, setDeletingConversationId] = useState<string | null>(null);
@@ -179,6 +219,17 @@ function ChatPageInner() {
     try {
       const res = await fetch("/api/conversations", { method: "DELETE" });
       if (res.ok) {
+        setConversations([]);
+        setConversationId(null);
+        setMessages([]);
+        router.push("/chat");
+      } else {
+        // Fallback: delete conversation-by-conversation
+        await Promise.all(
+          conversations.map((c) =>
+            fetch(`/api/conversations/${c.id}/delete`, { method: "POST" })
+          )
+        );
         setConversations([]);
         setConversationId(null);
         setMessages([]);
@@ -284,7 +335,7 @@ function ChatPageInner() {
           ...prev,
           {
             role: "assistant",
-            content: "Je n'ai pas trouvé de sources autorisées suffisantes pour répondre à cette question.",
+            content: data.reason || "Je n'ai pas de sources autorisées suffisantes pour répondre à cette question.",
             refusal: true,
           },
         ]);
@@ -376,7 +427,7 @@ function ChatPageInner() {
             href={previewUrl(citation)}
             target="_blank"
             rel="noopener noreferrer"
-            className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-lime-100 px-1.5 align-super text-[10px] font-bold text-lime-800 no-underline transition-all hover:bg-lime-400 hover:scale-105 active:scale-95 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-500"
+            className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-lime-100 px-1.5 align-super text-[10px] font-bold text-lime-800 no-underline transition-all hover:bg-lime-400 hover:scale-105 active:scale-95 shadow-2xs outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-500"
           >
             {match[1]}
           </a>
@@ -428,7 +479,7 @@ function ChatPageInner() {
           input.trim() && !loading
             ? "bg-lime-500 text-ink-950 shadow-sm hover:bg-lime-400 hover:scale-105 active:scale-95 cursor-pointer"
             : "bg-paper-200 text-ink-300 cursor-not-allowed opacity-60"
-        } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400`}
+        } outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400`}
       >
         {loading ? (
           <Loader2 size={18} className="animate-spin text-ink-950" />
@@ -452,33 +503,41 @@ function ChatPageInner() {
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
         } md:static md:z-auto md:w-64 md:translate-x-0 md:transition-none flex shrink-0 flex-col border-r border-ink-100 bg-paper-100 h-full`}
       >
-        <div className="p-3 flex items-center gap-2 border-b border-ink-100/60">
-          <button
-            onClick={() => {
-              router.push("/chat");
-              setMobileSidebarOpen(false);
-            }}
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-ink-100 bg-white px-3 py-2 text-sm font-medium text-ink-800 hover:border-lime-400 hover:text-lime-800 hover:shadow-2xs transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
-          >
-            <Plus size={15} strokeWidth={2.5} className="text-lime-600" />
-            Nouvelle conversation
-          </button>
-          {conversations.length > 0 && (
+        <div className="p-3 border-b border-ink-100/60">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setConfirmDeleteAll(true)}
-              className="p-2 rounded-xl border border-transparent text-ink-300 hover:border-red-100 hover:bg-red-50 hover:text-red-600 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-              title="Tout supprimer"
+              onClick={() => {
+                router.push("/chat");
+                setMobileSidebarOpen(false);
+              }}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-ink-100 bg-white px-3 py-2 text-sm font-medium text-ink-800 hover:border-lime-400 hover:text-lime-800 hover:shadow-2xs transition-all outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
             >
-              <Trash2 size={15} strokeWidth={2} />
+              <Plus size={15} strokeWidth={2.5} className="text-lime-600" />
+              Nouvelle conversation
             </button>
+            <button
+              onClick={() => setMobileSidebarOpen(false)}
+              className="md:hidden p-2 text-ink-400 hover:text-ink-800 outline-none focus:outline-none"
+              title="Fermer"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          {conversations.length > 0 && (
+            <div className="mt-2.5 pt-2 flex items-center justify-between border-t border-ink-100/50">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                Historique
+              </span>
+              <button
+                onClick={() => setConfirmDeleteAll(true)}
+                className="flex items-center gap-1.5 text-xs font-medium text-ink-400 hover:text-red-600 transition-colors px-1.5 py-0.5 rounded hover:bg-red-50 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                title="Supprimer toutes les conversations"
+              >
+                <Trash2 size={13} strokeWidth={2} />
+                <span>Tout supprimer</span>
+              </button>
+            </div>
           )}
-          <button
-            onClick={() => setMobileSidebarOpen(false)}
-            className="md:hidden p-2 text-ink-400 hover:text-ink-800 focus-visible:outline-none"
-            title="Fermer"
-          >
-            <X size={18} />
-          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-3">
@@ -511,7 +570,7 @@ function ChatPageInner() {
                           router.push(`/chat?c=${c.id}`);
                           setMobileSidebarOpen(false);
                         }}
-                        className="flex-1 min-w-0 flex items-center gap-2 px-2.5 py-2 text-left text-sm focus-visible:outline-none"
+                        className="flex-1 min-w-0 flex items-center gap-2 px-2.5 py-2 text-left text-sm outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 rounded-md"
                         title={c.title || "Nouvelle conversation"}
                       >
                         <MessageSquare
@@ -526,7 +585,7 @@ function ChatPageInner() {
                       <button
                         onClick={(e) => handleDeleteConversation(e, c.id, c.title)}
                         disabled={deletingConversationId === c.id}
-                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 shrink-0 p-1.5 rounded-md text-ink-300 hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50 focus-visible:outline-none"
+                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 shrink-0 p-1.5 rounded-md text-ink-300 hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                         title="Supprimer la conversation"
                       >
                         <Trash2 size={13} strokeWidth={2} />
@@ -560,14 +619,14 @@ function ChatPageInner() {
               <button
                 type="button"
                 onClick={() => setConfirmDelete(null)}
-                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
+                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
               >
                 Annuler
               </button>
               <button
                 type="button"
                 onClick={confirmAndDeleteConversation}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
               >
                 Supprimer
               </button>
@@ -597,7 +656,7 @@ function ChatPageInner() {
               <button
                 type="button"
                 onClick={() => setConfirmDeleteAll(false)}
-                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
+                className="flex-1 border border-ink-100 rounded-xl py-2.5 text-sm font-medium text-ink-600 hover:bg-paper-100 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
               >
                 Annuler
               </button>
@@ -605,7 +664,7 @@ function ChatPageInner() {
                 type="button"
                 onClick={handleConfirmDeleteAll}
                 disabled={deletingAll}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
               >
                 {deletingAll ? "Suppression…" : "Tout supprimer"}
               </button>
@@ -619,7 +678,7 @@ function ChatPageInner() {
   const mobileHistoryButton = (
     <button
       onClick={() => setMobileSidebarOpen(true)}
-      className="md:hidden inline-flex items-center gap-1.5 text-xs font-medium text-ink-600 hover:text-lime-700 transition-colors px-2.5 py-1.5 rounded-lg border border-ink-100 bg-white shadow-2xs"
+      className="md:hidden inline-flex items-center gap-1.5 text-xs font-medium text-ink-600 hover:text-lime-700 transition-colors px-2.5 py-1.5 rounded-lg border border-ink-100 bg-white shadow-2xs outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
       title="Historique des conversations"
     >
       <History size={14} strokeWidth={2} />
@@ -651,7 +710,7 @@ function ChatPageInner() {
                     key={s.question}
                     onClick={() => send(undefined, s.question)}
                     disabled={loading}
-                    className="group flex items-start gap-3.5 bg-white border border-ink-100 rounded-xl p-4 hover:border-lime-400 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 disabled:opacity-50 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
+                    className="group flex items-start gap-3.5 bg-white border border-ink-100 rounded-xl p-4 hover:border-lime-400 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 disabled:opacity-50 text-left cursor-pointer outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
                   >
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lime-100 text-lime-700 group-hover:bg-lime-500 group-hover:text-ink-950 transition-colors">
                       <s.icon size={17} strokeWidth={2} />
@@ -710,42 +769,87 @@ function ChatPageInner() {
 
                   {/* Sources Cards */}
                   {msg.citations && msg.citations.length > 0 && (
-                    <div className="mt-3 space-y-1.5">
+                    <div className="mt-3 space-y-2">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-400 px-1">
                         Sources citées
                       </p>
                       {msg.citations.map((c) => {
                         const key = `${i}-${c.sourceIndex}`;
                         const isDeleted = c.documentStatus === "deleted";
+                        const isExpanded = expanded === key;
+                        const isSnippetFull = !!expandedSnippets[key];
+                        // Find previous user message to extract keywords for highlighting
+                        const prevUserMsg = messages
+                          .slice(0, i)
+                          .reverse()
+                          .find((m) => m.role === "user");
+                        const keywords = getQuestionKeywords(prevUserMsg?.content);
+
                         return (
                           <div
                             key={key}
-                            className="group/src bg-white border border-ink-100 hover:border-lime-300 rounded-xl text-xs transition-all shadow-2xs"
+                            className={`group/src rounded-xl text-xs transition-all duration-200 border ${
+                              isExpanded
+                                ? "bg-lime-50/40 border-lime-400 shadow-xs ring-1 ring-lime-400/30"
+                                : "bg-white border-ink-100 hover:border-lime-300 shadow-2xs"
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-2 px-3 py-2.5">
                               <button
-                                onClick={() => setExpanded(expanded === key ? null : key)}
-                                className="flex-1 min-w-0 flex items-center gap-2 text-left font-medium text-ink-800 truncate hover:text-lime-700 transition-colors focus-visible:outline-none"
+                                onClick={() => setExpanded(isExpanded ? null : key)}
+                                className="flex-1 min-w-0 flex items-center gap-2 text-left font-medium text-ink-800 truncate hover:text-lime-700 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:ring-offset-1 rounded-lg"
                               >
-                                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-lime-100 text-[10px] font-bold text-lime-800">
+                                <span
+                                  className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+                                    isExpanded
+                                      ? "bg-lime-500 text-ink-950"
+                                      : "bg-lime-100 text-lime-800"
+                                  }`}
+                                >
                                   {c.sourceIndex}
                                 </span>
-                                <FileText size={14} className="text-ink-400 shrink-0 group-hover/src:text-lime-600 transition-colors" />
-                                <span className="truncate font-semibold text-ink-900">{c.documentTitle}</span>
+                                <FileText
+                                  size={14}
+                                  className={`shrink-0 transition-colors ${
+                                    isExpanded
+                                      ? "text-lime-600"
+                                      : "text-ink-400 group-hover/src:text-lime-600"
+                                  }`}
+                                />
+                                <span className="truncate font-semibold text-ink-900">
+                                  {c.documentTitle}
+                                </span>
                                 {isDeleted && (
-                                  <span className="text-ink-300 font-normal shrink-0">(document supprimé)</span>
+                                  <span className="text-ink-300 font-normal shrink-0">
+                                    (document supprimé)
+                                  </span>
                                 )}
                               </button>
                               <div className="flex items-center gap-2 shrink-0">
                                 <span className="text-[11px] text-ink-400 bg-paper-200 px-2 py-0.5 rounded-full font-medium">
-                                  v{c.versionNumber}{c.pageNumber ? ` · p.${c.pageNumber}` : ""}
+                                  v{c.versionNumber}
+                                  {c.pageNumber ? ` · p.${c.pageNumber}` : ""}
                                 </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpanded(isExpanded ? null : key)}
+                                  className="p-1 text-ink-400 hover:text-ink-700 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 rounded"
+                                  title={isExpanded ? "Replier la source" : "Déplier la source"}
+                                >
+                                  <ChevronDown
+                                    size={14}
+                                    strokeWidth={2.5}
+                                    className={`transition-transform duration-200 ${
+                                      isExpanded ? "rotate-180 text-lime-600" : ""
+                                    }`}
+                                  />
+                                </button>
                                 {!isDeleted && (
                                   <a
                                     href={previewUrl(c)}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="p-1 text-ink-400 hover:text-lime-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 rounded"
+                                    className="p-1 text-ink-400 hover:text-lime-700 transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-500 rounded"
                                     title="Ouvrir le document au passage utilisé"
                                   >
                                     <ExternalLink size={13} strokeWidth={2} />
@@ -753,14 +857,55 @@ function ChatPageInner() {
                                 )}
                               </div>
                             </div>
-                            {/* Expandable snippet preview */}
-                            {expanded === key && (
-                              <div className="px-3 pb-3 pt-2 text-ink-600 text-[11px] leading-relaxed border-t border-ink-100 bg-paper-50/50 rounded-b-xl">
-                                <p className="italic bg-white p-2.5 rounded-lg border border-ink-100 font-mono text-[11px] text-ink-700">
-                                  &ldquo;{c.snippetText}&rdquo;
-                                </p>
+
+                            {/* Hierarchical Preview with smooth height transition */}
+                            <div
+                              className={`grid transition-[grid-template-rows] duration-200 ease-out ${
+                                isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                              }`}
+                            >
+                              <div className="overflow-hidden">
+                                <div className="px-3 pb-3 pt-1 border-t border-ink-100/60">
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1.5 mt-1">
+                                    Extrait cité
+                                  </p>
+                                  <div className="border-l-2 border-lime-400 bg-paper-100 p-3 rounded-r-lg text-ink-800">
+                                    <p
+                                      className={`text-[12px] leading-relaxed italic ${
+                                        isSnippetFull ? "" : "line-clamp-3"
+                                      }`}
+                                    >
+                                      &ldquo;{renderHighlightedSnippet(c.snippetText, keywords)}&rdquo;
+                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedSnippets((prev) => ({
+                                          ...prev,
+                                          [key]: !prev[key],
+                                        }));
+                                      }}
+                                      className="mt-1.5 text-[11px] font-medium text-lime-700 hover:text-lime-800 hover:underline outline-none focus:outline-none focus-visible:ring-1 focus-visible:ring-lime-500 rounded cursor-pointer"
+                                    >
+                                      {isSnippetFull ? "Voir moins" : "Voir plus"}
+                                    </button>
+                                  </div>
+                                  {!isDeleted && (
+                                    <div className="mt-2 text-right">
+                                      <a
+                                        href={previewUrl(c)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-lime-700 hover:text-lime-800 hover:underline transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 rounded"
+                                      >
+                                        Voir le document complet →
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            )}
+                            </div>
                           </div>
                         );
                       })}
@@ -775,7 +920,7 @@ function ChatPageInner() {
                           <>
                             <button
                               onClick={() => sendFeedback(i, "useful")}
-                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 ${
+                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400 ${
                                 msg.feedback === "useful"
                                   ? "bg-lime-100 text-lime-700 ring-1 ring-lime-400 font-semibold"
                                   : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
@@ -787,7 +932,7 @@ function ChatPageInner() {
                             </button>
                             <button
                               onClick={() => sendFeedback(i, "not_useful")}
-                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
+                              className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${
                                 msg.feedback === "not_useful"
                                   ? "bg-red-100 text-red-700 ring-1 ring-red-400 font-semibold"
                                   : "text-ink-400 hover:bg-paper-200 hover:text-ink-700"
@@ -801,7 +946,7 @@ function ChatPageInner() {
                         )}
                         <button
                           onClick={() => handleCopy(i, msg.content)}
-                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-400 hover:bg-paper-200 hover:text-ink-700 transition-colors ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-400 hover:bg-paper-200 hover:text-ink-700 transition-colors ml-1 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-300"
                           title="Copier la réponse"
                         >
                           {copiedMessageIndex === i ? (
@@ -854,7 +999,7 @@ function ChatPageInner() {
         {showScrollBottom && (
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-24 right-6 md:right-8 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-white border border-ink-100 shadow-md text-ink-600 hover:text-ink-950 hover:bg-paper-100 transition-all hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
+            className="absolute bottom-24 right-6 md:right-8 z-30 flex h-9 w-9 items-center justify-center rounded-full bg-white border border-ink-100 shadow-md text-ink-600 hover:text-ink-950 hover:bg-paper-100 transition-all hover:scale-105 active:scale-95 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-lime-400"
             title="Défiler vers le bas"
           >
             <ChevronDown size={18} strokeWidth={2.5} />

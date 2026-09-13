@@ -29,7 +29,7 @@ test("system prompt contains explicit prompt-injection defense", () => {
 });
 
 test("system prompt instructs model to refuse when context is insufficient", () => {
-  assert.ok(SYSTEM_PROMPT.includes("I don't have enough authorized sources"));
+  assert.ok(SYSTEM_PROMPT.includes("Je n'ai pas de sources autorisées"));
 });
 
 test("system prompt forbids inventing source numbers", () => {

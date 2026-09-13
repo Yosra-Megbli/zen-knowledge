@@ -16,6 +16,11 @@ import {
   RotateCcw,
   Archive,
   MoreHorizontal,
+  UploadCloud,
+  FileText,
+  SearchX,
+  Check,
+  Search,
 } from "lucide-react";
 import { CustomSelect } from "../../components/CustomSelect.tsx";
 
@@ -91,6 +96,10 @@ export default function DocumentsPage() {
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
+  const [uploadStep, setUploadStep] = useState<number>(0); // 0 = form, 1 = extraction, 2 = découpage, 3 = embeddings, 4 = prêt
+  const [uploadSuccessDoc, setUploadSuccessDoc] = useState<{ versionId: string; title: string; chunkCount?: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
   const [confirmDelete, setConfirmDelete] = useState<{ versionId: string; title: string } | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<{ versionId: string; title: string } | null>(null);
   const [kebabOpenId, setKebabOpenId] = useState<string | null>(null);
@@ -123,6 +132,26 @@ export default function DocumentsPage() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   }
+
+  // Fermeture du kebab menu au clic extérieur ou touche Escape
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (kebabOpenId && !(e.target as HTMLElement).closest(".kebab-container")) {
+        setKebabOpenId(null);
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setKebabOpenId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [kebabOpenId]);
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
@@ -229,6 +258,15 @@ export default function DocumentsPage() {
     );
   }
 
+  function resetUploadModal() {
+    setShowModal(false);
+    setUploadStep(0);
+    setUploadSuccessDoc(null);
+    setError(null);
+    setIsDragging(false);
+    setForm({ title: "", description: "", visibility: "company", departmentId: "", reviewDate: "", file: null });
+  }
+
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     if (!form.file || !form.title.trim()) return;
@@ -239,40 +277,65 @@ export default function DocumentsPage() {
     }
 
     setUploading(true);
+    setUploadStep(1); // 1 = Extraction
     setError(null);
-    const fd = new FormData();
-    fd.append("file", form.file);
-    fd.append("title", form.title.trim());
-    if (form.description.trim()) fd.append("description", form.description.trim());
-    fd.append("visibility", form.visibility);
-    if (form.visibility === "department" && form.departmentId) {
-      fd.append("departmentId", form.departmentId);
-    }
-    if (form.reviewDate) {
-      fd.append("reviewDate", form.reviewDate);
-    }
+    setUploadSuccessDoc(null);
 
-    const res = await fetch("/api/documents/upload", { method: "POST", body: fd });
-    const data = await res.json().catch(() => ({}) as Record<string, unknown>);
-    if (!res.ok) {
-      const errCode = (data.errorCode ?? data.code) as string | undefined;
-      const errMsg = (data.errorMessage ?? data.error) as string | undefined;
-      if (errCode === "NO_EXTRACTABLE_TEXT" || errMsg?.includes("scanned/image-only")) {
-        setError(
-          "Ce PDF ne contient pas de couche texte exploitable. Il s'agit probablement d'un document scanné. Les PDF scannés nécessitent actuellement une étape OCR qui n'est pas disponible dans cette version."
-        );
-      } else if (errCode === "DUPLICATE_DOCUMENT") {
-        setError(errMsg || "Un document identique ou de même titre existe déjà dans votre organisation.");
-      } else {
-        setError(errMsg || "Erreur lors de l'upload.");
+    // Simulation progressive du stepper pendant le traitement
+    const timerStep2 = setTimeout(() => setUploadStep(2), 650); // 2 = Découpage
+    const timerStep3 = setTimeout(() => setUploadStep(3), 1400); // 3 = Embeddings
+
+    try {
+      const fd = new FormData();
+      fd.append("file", form.file);
+      fd.append("title", form.title.trim());
+      if (form.description.trim()) fd.append("description", form.description.trim());
+      fd.append("visibility", form.visibility);
+      if (form.visibility === "department" && form.departmentId) {
+        fd.append("departmentId", form.departmentId);
       }
-    } else {
-      setShowModal(false);
-      setForm({ title: "", description: "", visibility: "company", departmentId: "", reviewDate: "", file: null });
-      showToast("Document uploadé avec succès !", "success");
-      fetchDocs();
+      if (form.reviewDate) {
+        fd.append("reviewDate", form.reviewDate);
+      }
+
+      const res = await fetch("/api/documents/upload", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}) as Record<string, unknown>);
+
+      clearTimeout(timerStep2);
+      clearTimeout(timerStep3);
+
+      if (!res.ok) {
+        setUploadStep(0);
+        const errCode = (data.errorCode ?? data.code) as string | undefined;
+        const errMsg = (data.errorMessage ?? data.error) as string | undefined;
+        if (errCode === "NO_EXTRACTABLE_TEXT" || errMsg?.includes("scanned/image-only") || errMsg?.includes("aucun texte")) {
+          setError(
+            "Ce PDF ne contient pas de couche texte exploitable (document scanné). Les PDF scannés nécessitent actuellement une étape OCR non disponible dans cette version."
+          );
+        } else if (errCode === "DUPLICATE_DOCUMENT") {
+          setError(errMsg || "Un document identique ou de même titre existe déjà dans votre organisation.");
+        } else {
+          setError(errMsg || "Erreur lors de l'upload et de l'ingestion.");
+        }
+      } else {
+        setUploadStep(4); // 4 = Prêt
+        const versionId = (data.documentVersionId ?? data.latest_version_id ?? data.versionId) as string;
+        setUploadSuccessDoc({
+          versionId,
+          title: form.title,
+          chunkCount: (data.chunkCount as number) || undefined,
+        });
+        showToast("Document uploadé et indexé avec succès !", "success");
+        fetchDocs();
+      }
+    } catch {
+      clearTimeout(timerStep2);
+      clearTimeout(timerStep3);
+      setUploadStep(0);
+      setError("Erreur de connexion au serveur.");
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   }
 
   async function handlePublish(versionId: string) {
@@ -294,9 +357,23 @@ export default function DocumentsPage() {
     setError(null);
     try {
       const res = await fetch(`/api/documents/${versionId}/retry`, { method: "POST" });
-      const json = await res.json().catch(() => ({}) as { error?: string; errorMessage?: string; message?: string });
       if (!res.ok) {
-        const errorMsg = json.error || json.errorMessage || json.message || "Erreur lors de la réindexation.";
+        let errorMsg = "Erreur lors de la réindexation.";
+        try {
+          const text = await res.text();
+          try {
+            const json = JSON.parse(text);
+            errorMsg = json.error || json.errorMessage || json.message || errorMsg;
+          } catch {
+            if (text && text.length < 200) {
+              errorMsg = text;
+            } else {
+              errorMsg = `Erreur serveur (${res.status})`;
+            }
+          }
+        } catch {
+          // fallback default
+        }
         showToast(errorMsg, "error");
       } else {
         showToast("Réindexation effectuée avec succès !", "success");
@@ -428,17 +505,30 @@ export default function DocumentsPage() {
       </div>
 
       {!loading && docs.length > 0 && (
-        <div className="flex flex-col gap-2.5 mb-5">
-          {/* Search — full width */}
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Rechercher un document par titre ou description…"
-            className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs"
-          />
+        <div className="flex flex-col gap-3 mb-6 bg-white p-4 rounded-2xl border border-ink-100 shadow-2xs">
+          {/* Search bar with icon and clear button */}
+          <div className="relative">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher un document par titre ou description…"
+              className="w-full border border-ink-100 rounded-xl pl-10 pr-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs transition-shadow"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-700 p-0.5 rounded-full hover:bg-paper-100 transition-colors cursor-pointer"
+                title="Effacer la recherche"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
-          {/* Quick status filter chips (Étape 2) */}
-          <div className="flex items-center gap-2 overflow-x-auto py-0.5 text-xs">
+          {/* Quick status filter chips */}
+          <div className="flex items-center gap-2 overflow-x-auto py-0.5 text-xs no-scrollbar">
             {[
               { key: "all", label: `Tous (${statusCounts.all})` },
               { key: "published", label: `Publiés (${statusCounts.published})` },
@@ -451,9 +541,9 @@ export default function DocumentsPage() {
                   key={chip.key}
                   type="button"
                   onClick={() => setStatusFilter(chip.key)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-lime-400 focus-visible:outline-none ${
                     isActive
-                      ? "bg-lime-100 text-ink-950 border border-lime-400 font-semibold shadow-2xs"
+                      ? "bg-lime-100 text-ink-950 border border-lime-400 font-semibold shadow-2xs scale-[1.02]"
                       : "bg-white text-ink-600 border border-ink-100 hover:bg-paper-100 hover:border-ink-200"
                   }`}
                 >
@@ -496,9 +586,9 @@ export default function DocumentsPage() {
           </div>
 
           {/* Results counter and reset */}
-          <div className="flex items-center justify-between text-xs text-ink-400 px-1 pt-0.5">
+          <div className="flex items-center justify-between text-xs text-ink-400 px-1 pt-0.5 border-t border-ink-50">
             <span>
-              {filteredDocs.length} document{filteredDocs.length !== 1 ? "s" : ""} affiché{filteredDocs.length !== 1 ? "s" : ""}
+              <span className="font-semibold text-ink-800">{filteredDocs.length}</span> document{filteredDocs.length !== 1 ? "s" : ""} affiché{filteredDocs.length !== 1 ? "s" : ""}
             </span>
             {(search || statusFilter !== "all" || visibilityFilter !== "all" || companyFilter !== "all" || departmentFilter !== "all") && (
               <button
@@ -510,9 +600,10 @@ export default function DocumentsPage() {
                   setCompanyFilter("all");
                   setDepartmentFilter("all");
                 }}
-                className="text-lime-700 hover:text-lime-900 font-medium hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-lime-800 hover:text-lime-950 bg-lime-50 hover:bg-lime-100 px-2 py-0.5 rounded-full border border-lime-200 transition-colors cursor-pointer"
               >
-                Réinitialiser les filtres
+                <X size={12} />
+                Effacer les filtres
               </button>
             )}
           </div>
@@ -520,11 +611,61 @@ export default function DocumentsPage() {
       )}
 
       {loading ? (
-        <div className="text-center text-ink-400 py-20">Chargement…</div>
+        <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden shadow-2xs p-4 space-y-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center justify-between gap-4 animate-pulse py-3 px-3 border-b border-ink-50 last:border-0">
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-paper-200 rounded-md w-1/3" />
+                <div className="h-3 bg-paper-100 rounded-md w-1/2" />
+              </div>
+              <div className="h-6 bg-paper-100 rounded-full w-24 hidden sm:block" />
+              <div className="h-6 bg-paper-100 rounded-full w-20" />
+              <div className="h-4 bg-paper-100 rounded-md w-12 hidden md:block" />
+              <div className="h-8 bg-paper-100 rounded-lg w-16" />
+            </div>
+          ))}
+        </div>
       ) : docs.length === 0 ? (
-        <div className="text-center text-ink-400 py-20">Aucun document disponible.</div>
+        <div className="text-center bg-white rounded-2xl border border-ink-100 p-12 space-y-3 shadow-2xs">
+          <div className="w-12 h-12 rounded-2xl bg-paper-100 text-ink-400 flex items-center justify-center mx-auto border border-ink-100">
+            <FileText size={24} />
+          </div>
+          <h3 className="font-semibold text-ink-900 text-base">Aucun document dans la bibliothèque</h3>
+          <p className="text-sm text-ink-400 max-w-sm mx-auto">
+            Commencez par ajouter votre premier document d&apos;entreprise pour l&apos;indexer dans le moteur RAG.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 bg-ink-950 hover:bg-ink-900 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors cursor-pointer mt-2 shadow-xs"
+          >
+            <FileUp size={16} />
+            Nouveau document
+          </button>
+        </div>
       ) : filteredDocs.length === 0 ? (
-        <div className="text-center text-ink-400 py-20">Aucun document ne correspond à ces critères.</div>
+        <div className="text-center bg-white rounded-2xl border border-ink-100 p-12 space-y-3 shadow-2xs">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+            <SearchX size={24} strokeWidth={1.75} />
+          </div>
+          <h3 className="font-semibold text-ink-900 text-base">Aucun document ne correspond</h3>
+          <p className="text-sm text-ink-400 max-w-sm mx-auto">
+            Aucun résultat trouvé pour votre sélection de filtres ou de recherche.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setStatusFilter("all");
+              setVisibilityFilter("all");
+              setCompanyFilter("all");
+              setDepartmentFilter("all");
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-ink-200 text-sm font-medium text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
+          >
+            Réinitialiser les filtres
+          </button>
+        </div>
       ) : (
         <>
           {/* ── Mobile cards (< md) ──────────────────────────────────────── */}
@@ -699,7 +840,7 @@ export default function DocumentsPage() {
                 <col className="w-[8%]" />
                 <col className="w-[6%]" />
               </colgroup>
-              <thead className="bg-paper-100 border-b border-ink-100">
+              <thead className="sticky top-0 bg-paper-100/95 backdrop-blur-xs border-b border-ink-100 z-10 shadow-2xs">
                 <tr>
                   <th className="text-left px-3.5 py-3 font-medium text-ink-500">
                     {renderSortHeader("title", "Titre")}
@@ -912,7 +1053,7 @@ export default function DocumentsPage() {
 
                           {/* Menu Kebab ⋯ */}
                           {doc.latest_version_id && (
-                            <div className="relative inline-block text-left">
+                            <div className="relative inline-block text-left kebab-container">
                               <button
                                 type="button"
                                 onClick={() => setKebabOpenId(kebabOpenId === doc.id ? null : doc.id)}
@@ -1056,128 +1197,352 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      {/* Upload Modal */}
+      {/* Upload Modal (Étape 1 Premium) */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto border-t-4 border-lime-400">
-            <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-9 h-9 rounded-xl bg-lime-400 flex items-center justify-center shrink-0">
-                <FileUp size={18} className="text-ink-900" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-7 max-h-[92vh] overflow-y-auto border border-ink-100 animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between gap-3 mb-5 border-b border-ink-50 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-lime-400/90 text-ink-950 flex items-center justify-center shrink-0 shadow-xs">
+                  <FileUp size={20} strokeWidth={2.2} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-ink-950">Nouveau document</h2>
+                  <p className="text-xs text-ink-400">Ajout et indexation dans le moteur RAG</p>
+                </div>
               </div>
-              <h2 className="text-lg font-semibold text-ink-900">Nouveau document</h2>
+              <button
+                type="button"
+                onClick={resetUploadModal}
+                className="text-ink-400 hover:text-ink-700 p-1.5 rounded-xl hover:bg-paper-100 transition-colors cursor-pointer"
+                title="Fermer"
+              >
+                <X size={18} />
+              </button>
             </div>
-            <form onSubmit={handleUpload} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ink-700">Titre *</label>
-                <input
-                  required
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
-                />
+
+            {/* Content: Success / Uploading / Form */}
+            {uploadSuccessDoc ? (
+              <div className="flex flex-col items-center text-center space-y-4 py-3 animate-in fade-in">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border-2 border-emerald-200 shadow-sm">
+                  <CheckCircle2 size={36} />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-xl font-bold text-ink-950">Document indexé avec succès !</h3>
+                  <p className="text-sm text-ink-500 max-w-sm mx-auto leading-relaxed">
+                    « <span className="font-semibold text-ink-900">{uploadSuccessDoc.title}</span> » a été découpé et vectorisé.
+                  </p>
+                </div>
+
+                <div className="w-full bg-paper-50 border border-ink-100 rounded-2xl p-4 text-xs text-left space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-ink-500 font-medium">Statut d&apos;indexation :</span>
+                    <span className="font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
+                      Prêt (Ready)
+                    </span>
+                  </div>
+                  {uploadSuccessDoc.chunkCount !== undefined && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-ink-500 font-medium">Segments vectorisés :</span>
+                      <span className="font-semibold text-ink-800">{uploadSuccessDoc.chunkCount} chunks</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-ink-500 font-medium">Recherche RAG :</span>
+                    <span className="text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
+                      Publication explicite requise
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 w-full pt-2">
+                  <button
+                    type="button"
+                    onClick={resetUploadModal}
+                    className="flex-1 border border-ink-200 rounded-xl py-2.5 text-sm font-medium text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
+                  >
+                    Garder en prêt (fermer)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const vid = uploadSuccessDoc.versionId;
+                      resetUploadModal();
+                      if (vid) {
+                        await handlePublish(vid);
+                      }
+                    }}
+                    className="flex-1 bg-lime-400 hover:bg-lime-500 text-ink-950 font-bold rounded-xl py-2.5 text-sm transition-colors cursor-pointer shadow-xs inline-flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 size={16} />
+                    Publier dans le RAG
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ink-700">Description</label>
-                <input
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="border border-ink-100 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
-                />
+            ) : uploading ? (
+              <div className="py-8 space-y-7 animate-in fade-in">
+                <div className="text-center space-y-1.5">
+                  <h3 className="text-base font-bold text-ink-950">Indexation en cours…</h3>
+                  <p className="text-xs text-ink-400">Traitement automatique du document et vectorisation locale</p>
+                </div>
+
+                {/* Stepper 4 étapes */}
+                <div className="relative flex items-center justify-between px-3">
+                  <div className="absolute left-7 right-7 top-4 -translate-y-1/2 h-0.5 bg-ink-100 -z-0" />
+                  {[
+                    { step: 1, label: "Extraction" },
+                    { step: 2, label: "Découpage" },
+                    { step: 3, label: "Embeddings" },
+                    { step: 4, label: "Prêt" },
+                  ].map((s) => {
+                    const isDone = uploadStep > s.step;
+                    const isCurrent = uploadStep === s.step;
+                    return (
+                      <div key={s.step} className="flex flex-col items-center gap-2 z-10 bg-white px-1">
+                        <div
+                          className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all shadow-2xs ${
+                            isDone
+                              ? "bg-emerald-500 text-white"
+                              : isCurrent
+                              ? "bg-lime-400 text-ink-950 ring-4 ring-lime-200 animate-pulse"
+                              : "bg-paper-100 text-ink-400 border border-ink-100"
+                          }`}
+                        >
+                          {isDone ? (
+                            <Check size={16} strokeWidth={2.5} />
+                          ) : isCurrent ? (
+                            <RefreshCw size={14} className="animate-spin" />
+                          ) : (
+                            s.step
+                          )}
+                        </div>
+                        <span
+                          className={`text-xs ${
+                            isCurrent
+                              ? "text-ink-950 font-bold"
+                              : isDone
+                              ? "text-emerald-700 font-semibold"
+                              : "text-ink-400 font-normal"
+                          }`}
+                        >
+                          {s.label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="bg-paper-50 rounded-xl p-3 text-center border border-ink-100/60">
+                  <p className="text-xs text-ink-500">
+                    {uploadStep === 1 && "Lecture du contenu texte du fichier (PDF/TXT)…"}
+                    {uploadStep === 2 && "Découpage sémantique en segments chevauchants (chunks)…"}
+                    {uploadStep === 3 && "Calcul des vecteurs d'embedding (modèle local Multilingual-E5)…"}
+                    {uploadStep >= 4 && "Finalisation et enregistrement de la version…"}
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ink-700">Visibilité</label>
-                <CustomSelect
-                  id="modal-visibility"
-                  value={form.visibility}
-                  onChange={(v) => setForm((f) => ({ ...f, visibility: v as "company" | "department" | "restricted" }))}
-                  options={[
-                    { value: "company", label: "Entreprise" },
-                    { value: "department", label: "Département" },
-                    { value: "restricted", label: "Restreint" },
-                  ]}
-                />
-              </div>
-              {form.visibility === "department" && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-ink-700">Département *</label>
-                  {departments.length === 0 ? (
-                    <p className="text-xs text-ink-500 bg-paper-100 rounded-lg p-2.5">
-                      Aucun département configuré pour votre entreprise.
-                    </p>
+            ) : (
+              <form onSubmit={handleUpload} className="flex flex-col gap-4">
+                {/* Zone de dépôt Drag & Drop */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const dropped = e.dataTransfer.files?.[0];
+                    if (dropped) {
+                      setForm((f) => ({
+                        ...f,
+                        file: dropped,
+                        title: f.title ? f.title : dropped.name.replace(/\.[^/.]+$/, ""),
+                      }));
+                    }
+                  }}
+                  onClick={() => {
+                    const input = document.getElementById("file-upload-input");
+                    input?.click();
+                  }}
+                  className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                    isDragging
+                      ? "border-lime-500 bg-lime-50/70 scale-[1.01]"
+                      : form.file
+                      ? "border-emerald-300 bg-emerald-50/30"
+                      : "border-ink-200 bg-paper-50/50 hover:border-lime-400 hover:bg-lime-50/20"
+                  }`}
+                >
+                  <input
+                    id="file-upload-input"
+                    type="file"
+                    accept=".pdf,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0] ?? null;
+                      if (selected) {
+                        setForm((f) => ({
+                          ...f,
+                          file: selected,
+                          title: f.title ? f.title : selected.name.replace(/\.[^/.]+$/, ""),
+                        }));
+                      }
+                    }}
+                  />
+
+                  {form.file ? (
+                    <div className="flex items-center justify-between gap-3 bg-white border border-emerald-200 rounded-xl p-3 shadow-2xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                          <FileText size={18} />
+                        </div>
+                        <div className="text-left min-w-0">
+                          <p className="text-xs font-semibold text-ink-900 truncate">{form.file.name}</p>
+                          <p className="text-[11px] text-ink-400">{formatFileSize(form.file.size)}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setForm((f) => ({ ...f, file: null }));
+                        }}
+                        className="p-1 rounded-lg text-ink-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Changer de fichier"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
                   ) : (
-                    <CustomSelect
-                      id="modal-department"
-                      required
-                      value={form.departmentId}
-                      onChange={(v) => setForm((f) => ({ ...f, departmentId: v }))}
-                      options={[
-                        { value: "", label: "Sélectionnez un département" },
-                        ...departments.map((dept) => ({ value: dept.id, label: dept.name })),
-                      ]}
-                    />
+                    <div className="space-y-1.5">
+                      <div className="w-11 h-11 rounded-2xl bg-paper-100 text-ink-600 flex items-center justify-center mx-auto border border-ink-100">
+                        <UploadCloud size={22} className="text-lime-700" />
+                      </div>
+                      <p className="text-sm font-medium text-ink-800">
+                        Glissez un <span className="font-bold">PDF</span> ou <span className="font-bold">TXT</span> ici
+                      </p>
+                      <p className="text-xs text-ink-400">ou cliquez pour parcourir vos fichiers (max 20 Mo)</p>
+                    </div>
                   )}
                 </div>
-              )}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ink-700">Date de révision</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                    <Calendar size={15} className="text-ink-300" strokeWidth={1.75} />
-                  </span>
-                  {!form.reviewDate && (
-                    <span className="absolute left-9 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-ink-300 select-none">
-                      jj/mm/aaaa
-                    </span>
-                  )}
+
+                {/* Titre */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-ink-600">Titre du document *</label>
                   <input
-                    type="date"
-                    value={form.reviewDate}
-                    onChange={(e) => setForm((f) => ({ ...f, reviewDate: e.target.value }))}
-                    className="w-full border border-ink-100 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lime-400"
+                    required
+                    placeholder="Ex: Politique de télétravail 2026"
+                    value={form.title}
+                    onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                    className="border border-ink-100 rounded-xl px-3.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs"
                   />
                 </div>
-                <p className="text-xs text-ink-400">Facultatif — utilisé pour le suivi d&apos;obsolescence.</p>
-              </div>
-              <hr className="border-ink-100 my-1" />
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-ink-700">Fichier (PDF ou TXT) *</label>
-                <input
-                  type="file"
-                  accept=".pdf,.txt"
-                  required
-                  onChange={(e) => setForm((f) => ({ ...f, file: e.target.files?.[0] ?? null }))}
-                  className="text-sm text-ink-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-lime-400 file:text-ink-900 hover:file:bg-lime-500"
-                />
-                <p className="text-xs text-ink-400">Formats acceptés : PDF, TXT (max 20 Mo)</p>
-                {form.file && (
-                  <div className="flex items-center justify-between text-xs bg-paper-100 border border-ink-100 rounded-lg px-3 py-2 text-ink-700 mt-1">
-                    <span className="truncate font-medium">{form.file.name}</span>
-                    <span className="shrink-0 text-ink-400 ml-2">{formatFileSize(form.file.size)}</span>
+
+                {/* Description */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-ink-600">Description</label>
+                  <input
+                    placeholder="Ex: Règles et démarches applicables aux collaborateurs"
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    className="border border-ink-100 rounded-xl px-3.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs"
+                  />
+                </div>
+
+                {/* Visibilité & Département */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-ink-600">Niveau de visibilité</label>
+                    <CustomSelect
+                      id="modal-visibility"
+                      value={form.visibility}
+                      onChange={(v) => setForm((f) => ({ ...f, visibility: v as "company" | "department" | "restricted" }))}
+                      options={[
+                        { value: "company", label: "Entreprise" },
+                        { value: "department", label: "Département" },
+                        { value: "restricted", label: "Restreint (Admin)" },
+                      ]}
+                    />
+                  </div>
+
+                  {form.visibility === "department" ? (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-ink-600">Service concerné *</label>
+                      <CustomSelect
+                        id="modal-department"
+                        required
+                        value={form.departmentId}
+                        onChange={(v) => setForm((f) => ({ ...f, departmentId: v }))}
+                        options={[
+                          { value: "", label: "Sélectionner un service" },
+                          ...departments.map((dept) => ({ value: dept.id, label: dept.name })),
+                        ]}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-ink-600">Date de révision</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <Calendar size={14} className="text-ink-400" />
+                        </span>
+                        <input
+                          type="date"
+                          value={form.reviewDate}
+                          onChange={(e) => setForm((f) => ({ ...f, reviewDate: e.target.value }))}
+                          className="w-full border border-ink-100 rounded-xl pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {form.visibility === "department" && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-ink-600">Date de révision</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                        <Calendar size={14} className="text-ink-400" />
+                      </span>
+                      <input
+                        type="date"
+                        value={form.reviewDate}
+                        onChange={(e) => setForm((f) => ({ ...f, reviewDate: e.target.value }))}
+                        className="w-full border border-ink-100 rounded-xl pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-lime-400 shadow-2xs"
+                      />
+                    </div>
                   </div>
                 )}
-              </div>
-              {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setError(null);
-                    setForm({ title: "", description: "", visibility: "company", departmentId: "", reviewDate: "", file: null });
-                  }}
-                  className="flex-1 border border-ink-200 rounded-lg py-2 text-sm font-medium text-ink-700 hover:bg-paper-100 transition-colors"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploading}
-                  className="flex-1 bg-ink-950 hover:bg-ink-900 text-white rounded-lg py-2 text-sm font-medium transition-colors disabled:opacity-60"
-                >
-                  {uploading ? "Upload…" : "Uploader"}
-                </button>
-              </div>
-            </form>
+
+                {/* Erreur typée */}
+                {error && (
+                  <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 animate-in fade-in">
+                    <AlertCircle size={16} className="shrink-0 text-red-500 mt-0.5" />
+                    <p className="leading-relaxed">{error}</p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-3 border-t border-ink-50">
+                  <button
+                    type="button"
+                    onClick={resetUploadModal}
+                    className="flex-1 border border-ink-200 rounded-xl py-2.5 text-sm font-medium text-ink-700 hover:bg-paper-100 transition-colors cursor-pointer"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!form.file || !form.title.trim()}
+                    className="flex-1 bg-ink-950 hover:bg-ink-900 text-white rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-xs cursor-pointer"
+                  >
+                    Lancer l&apos;ingestion
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

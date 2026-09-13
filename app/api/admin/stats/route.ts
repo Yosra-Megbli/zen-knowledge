@@ -72,7 +72,7 @@ export async function GET(request: Request) {
           ORDER BY d.review_date ASC
         `;
 
-      const [company, totals, costRows, feedbackRows, refusals, recent, overdue] = await Promise.all([
+      const [company, totals, costRows, feedbackRows, refusals, recent, overdue, obsRes, refusalsByDayRes, refusalQuestionsRes] = await Promise.all([
         client.query<{ name: string }>(`SELECT name FROM companies WHERE id = $1`, [ctx.companyId]),
         client.query<{ total: number; answers: number; errors: number; total_tokens: number | null }>(`
           SELECT
@@ -83,10 +83,6 @@ export async function GET(request: Request) {
           FROM audit_logs
           WHERE action IN ('rag_answer','rag_refusal','rag_error')
         `),
-        // Cost is computed in JS (lib/rag/pricing.ts), not SQL, so the
-        // price table stays a single reusable/testable source of truth
-        // instead of duplicated arithmetic — one row per priceable
-        // answer is small enough at this dataset's scale.
         client.query<{ model: string | null; prompt_tokens: number | null; completion_tokens: number | null }>(`
           SELECT
             metadata->>'modelUsed' AS model,
@@ -129,17 +125,60 @@ export async function GET(request: Request) {
           ORDER BY al.created_at DESC
           LIMIT $1 OFFSET $2
         `, [ACTIVITY_PAGE_SIZE + 1, offset]),
-        // Documents whose review date has passed and are still published —
-        // scoped to the caller's company by RLS (no WHERE company_id needed).
-        // CURRENT_DATE used (not NOW()) because review_date is a date column,
-        // not a timestamp — comparing with NOW() would do an implicit cast.
-        // If review_tasks exists, LEFT JOIN surfaces the W3 notification state.
         client.query<{ id: string; version_id: string; title: string; review_date: string; owner_email: string; owner_name: string; days_overdue: number; rt_status: string | null; rt_notified_at: string | null; rt_reminded_at: string | null }>(
           overdueQuery
         ).catch((err) => {
           captureError(err, { route: "admin/stats", query: "overdue" });
           return { rows: [] };
         }),
+        // Observability aggregates
+        client.query<{
+          avg_latency_ms: number | null;
+          avg_source_count: number | null;
+          avg_prompt_tokens: number | null;
+          avg_completion_tokens: number | null;
+          model: string | null;
+        }>(`
+          SELECT
+            ROUND(AVG((metadata->>'latencyMs')::int))::int AS avg_latency_ms,
+            ROUND(AVG((metadata->>'sourceCount')::int)::numeric, 1)::float AS avg_source_count,
+            ROUND(AVG((metadata->>'promptTokens')::int))::int AS avg_prompt_tokens,
+            ROUND(AVG((metadata->>'completionTokens')::int))::int AS avg_completion_tokens,
+            MODE() WITHIN GROUP (ORDER BY metadata->>'modelUsed') AS model
+          FROM audit_logs
+          WHERE action = 'rag_answer' AND metadata->>'latencyMs' IS NOT NULL
+        `).catch(() => ({ rows: [] })),
+        // Refusals history by day (last 14 days) for pure CSS bar chart
+        client.query<{ date: string; count: number }>(`
+          SELECT
+            to_char(created_at, 'YYYY-MM-DD') AS date,
+            COUNT(*)::int AS count
+          FROM audit_logs
+          WHERE action = 'rag_refusal'
+            AND created_at >= (CURRENT_DATE - INTERVAL '13 days')
+          GROUP BY to_char(created_at, 'YYYY-MM-DD')
+          ORDER BY date ASC
+        `).catch(() => ({ rows: [] })),
+        // Texts of refusal questions from conversation_messages if available
+        client.query<{ question: string; created_at: string; question_length: number }>(`
+          SELECT DISTINCT ON (cm_user.content)
+            cm_user.content AS question,
+            cm_user.created_at,
+            LENGTH(cm_user.content)::int AS question_length
+          FROM conversation_messages cm_asst
+          JOIN conversation_messages cm_user 
+            ON cm_user.conversation_id = cm_asst.conversation_id 
+           AND cm_user.role = 'user'
+           AND cm_user.created_at <= cm_asst.created_at
+          WHERE cm_asst.role = 'assistant' 
+            AND (
+              cm_asst.content ILIKE '%sources autorisées%' 
+              OR cm_asst.content ILIKE '%authorized sources%'
+              OR cm_asst.content ILIKE '%suffisantes pour répondre%'
+            )
+          ORDER BY cm_user.content, cm_user.created_at DESC
+          LIMIT 20
+        `).catch(() => ({ rows: [] })),
       ]);
 
       const estimatedCostUsd = costRows.rows.reduce(
@@ -159,6 +198,15 @@ export async function GET(request: Request) {
         estimatedCostUsd,
         feedback: feedbackByRating,
         refusals: refusals.rows,
+        refusalsByDay: refusalsByDayRes.rows,
+        refusalQuestions: refusalQuestionsRes.rows,
+        observability: obsRes.rows[0] ?? {
+          avg_latency_ms: null,
+          avg_source_count: null,
+          avg_prompt_tokens: null,
+          avg_completion_tokens: null,
+          model: null,
+        },
         recent: { rows: recentRows, page, hasNextPage },
         overdueDocuments: overdue.rows,
       };

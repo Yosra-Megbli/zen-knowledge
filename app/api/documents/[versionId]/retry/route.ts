@@ -3,6 +3,8 @@ import { getAuthContext } from "../../../../../lib/permissions/authContext.ts";
 import { retryFailedVersion } from "../../../../../lib/ingestion/pipeline/retryVersion.ts";
 import { IngestionError, IngestionForbiddenError, IngestionNotFoundError } from "../../../../../lib/ingestion/errors.ts";
 
+export const maxDuration = 60;
+
 export async function POST(_request: Request, { params }: { params: Promise<{ versionId: string }> }) {
   try {
     const ctx = await getAuthContext();

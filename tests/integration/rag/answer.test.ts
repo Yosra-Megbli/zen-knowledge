@@ -161,7 +161,7 @@ test("F — zero authorized sources produces refusal without calling LLM", async
   // - if refusal: LLM must not have been called
   // - if answer: the gate passed legitimately (similarity >= threshold)
   if (result.refusal === true) {
-    assert.ok(result.reason.includes("don't have enough authorized sources"));
+    assert.ok(result.reason.includes("sources autorisées suffisantes"));
     assert.equal(calls.length, 0, "LLM must NOT be called when refusal");
   } else {
     // Gate passed — verify LLM was called exactly once (correct behavior)

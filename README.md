@@ -6,6 +6,12 @@ Plateforme conversationnelle interne multi-entreprises permettant aux collaborat
 
 Le système résout le problème de l'accès cloisonné et sécurisé à l'information documentaire en entreprise : isolation stricte entre filiales (multi-tenant), permissions granulaires (par rôle, département et niveau de visibilité), versioning documentaire traçable, citations cliquables et vérifiables, gestion du cycle de vie et de l'obsolescence des documents, et observabilité complète pour les administrateurs.
 
+## Aperçu de l'interface
+
+| Connexion & Multi-tenant | Chat RAG & Citations dépliées | Administration & Observabilité |
+|:---:|:---:|:---:|
+| ![Page de connexion](docs/screenshots/login.png) | ![Chat et aperçu de citation](docs/screenshots/chat-citation.png) | ![Tableau de bord administration](docs/screenshots/admin.png) |
+
 ## Démo vidéo
 
 Lien : À ajouter après enregistrement de la vidéo de démonstration.
@@ -29,7 +35,7 @@ Le document "Rapport financier confidentiel — T4 2025" existe réellement en b
 2. **Accès légitime** : Reconnectez-vous en **ZEN Home & Lifestyle** (admin) → posez exactement la même question → **réponse sourcée avec citation cliquable**.
 3. **Isolation intra-entreprise par rôle** : Connectez-vous en **ZEN Retail Tunisia — Employé** → demandez la grille salariale 2026 (document `restricted`, propre à sa société) → **refus**, prouvant que le filtrage descend jusqu'au rôle et au niveau de visibilité, pas seulement à l'entreprise.
 
-Dans les trois cas de refus, le message est strictement identique (`"I don't have enough authorized sources to answer this question."`) — qu'il s'agisse d'une question hors sujet, d'un document d'une autre entreprise ou d'un document restreint. Le refus ne révèle jamais *pourquoi*, protégeant ainsi l'existence même des documents non autorisés.
+Dans les trois cas de refus, le message est strictement identique (`"Je n'ai pas de sources autorisées suffisantes pour répondre à cette question."`) — qu'il s'agisse d'une question hors sujet, d'un document d'une autre entreprise ou d'un document restreint. Le refus ne révèle jamais *pourquoi*, protégeant ainsi l'existence même des documents non autorisés.
 
 ## Parcours recommandé pour l'évaluation
 
@@ -185,16 +191,21 @@ Workflow + doc : [`n8n/workflows/W1-ingestion.json`](n8n/workflows/W1-ingestion.
 
 ### W3 — Obsolescence
 
-Workflow W3 prêt pour exécution n8n : détection des documents à revoir, création/traitement des tâches de revue, rappels et dépublication après délai de grâce. Le workflow est fourni en JSON et peut être exécuté localement avec n8n. La validation complète de l'exécution cloud via le transaction pooler Supabase reste une limitation connue.
+Deux modes d'exploitation complémentaires, partageant les mêmes fondations en base de données (`review_tasks`, fonctions SQL `SECURITY DEFINER` et politiques RLS) :
 
-Fonctionnalités et endpoints :
-- Détection des documents dont `review_date` approche ou est dépassée (`GET /api/n8n/review-due`, cross-company via `w3_get_review_due_documents()` — `SECURITY DEFINER`).
-- Notification et suivi (`POST /api/n8n/review-due/notify`, upsert idempotent sur `review_tasks`).
-- Dépublication automatique au-delà de la période de grâce (`POST /api/n8n/unpublish`) — le document redevient immédiatement non-retrouvable par RLS.
+1. **Mode automatisé (workflow n8n)** :
+   - Détection programmée des documents dont `review_date` approche ou est dépassée (`GET /api/n8n/review-due`, cross-company via `w3_get_review_due_documents()` — `SECURITY DEFINER`).
+   - Notification et suivi (`POST /api/n8n/review-due/notify`, upsert idempotent sur `review_tasks`).
+   - Dépublication automatique au-delà de la période de grâce (`POST /api/n8n/unpublish`) — le document redevient immédiatement non-retrouvable par RLS.
+   - Workflow + doc : [`n8n/workflows/W3-obsolescence.json`](n8n/workflows/W3-obsolescence.json), [`n8n/docs/W3-obsolescence.md`](n8n/docs/W3-obsolescence.md).
 
-Workflow + doc : [`n8n/workflows/W3-obsolescence.json`](n8n/workflows/W3-obsolescence.json), [`n8n/docs/W3-obsolescence.md`](n8n/docs/W3-obsolescence.md).
+2. **Mode interactif (UI Admin `/admin/obsolete`)** :
+   - Tableau de bord dédié aux administrateurs pour le pilotage direct du cycle de vie documentaire.
+   - Vue filtrée des documents en retard critique (`overdue`) et des révisions à venir sous 30 jours.
+   - Actions directes en un clic : **Notifier** le propriétaire, **Relancer (N)** avec incrémentation du compteur de rappels, **Dépublier** (exclusion RAG immédiate via RLS) et **Republier** manuellement.
+   - Traçabilité complète adossée à la table `review_tasks` (`status`, `notified_at`, `reminded_at`, `reminder_count`).
 
-Toutes les routes d'écriture W3 résolvent `company_id`/`owner_id` côté serveur via `w3_resolve_document_for_task()` — jamais depuis le corps de la requête n8n, même si n8n est un appelant de confiance (principe appliqué uniformément, pas seulement pour les entrées utilisateur).
+Toutes les routes d'écriture W3 résolvent `company_id`/`owner_id` côté serveur via `w3_resolve_document_for_task()` — jamais depuis le corps de la requête client ou n8n, même si n8n est un appelant de confiance (principe appliqué uniformément, pas seulement pour les entrées utilisateur).
 
 ### Pourquoi W2 n'est pas un workflow n8n séparé
 
@@ -204,10 +215,10 @@ La latence d'un aller-retour HTTP supplémentaire (Next.js → n8n → Next.js �
 
 ## Interface
 
-- `/login` — Auth.js Credentials avec boutons de connexion rapide
-- `/chat` — question/réponse RAG, citations cliquables vers le document source, sidebar réactive avec suppression de conversation
-- `/documents` — liste documentaire, upload (PDF/TXT), aperçu avec surlignage de passage, gestion du versioning et publication explicite
-- `/admin` — tableau de bord d'administration : statistiques d'usage, suivi des refus, suivi des documents dépassant leur date de révision et coût estimé
+- `/login` — Authentification Auth.js (Credentials + JWT) avec boutons de connexion rapide un-clic pour les différents profils démo (Admin, Employé, multi-filiales).
+- `/chat` — Assistant conversationnel RAG : réponses sourcées avec citations numérotées `[n]`, volet d'aperçu source surligné (extrait hiérarchisé, termes clés mis en valeur, lien direct vers le document complet), feedback persistant (utile/inexact synchronisé en base), affichage de la latence (ms), et sidebar réactive d'historique avec bouton *"Tout supprimer"*.
+- `/documents` — Gestion documentaire avancée : filtres rapides par chips avec compteurs dynamiques (Tous, Publiés, Archivés, Échec), sélecteurs multi-critères (Société, Service, Visibilité), colonnes Société·Service, gestion fine du cycle de vie (Archiver / Réactiver avec exclusion instantanée du RAG, Réindexer avec affichage des messages d'erreur typés), et aperçu avec surlignage de passage.
+- `/admin` — Tableau de bord d'administration et d'observabilité : KPIs clés (coût estimé, tokens consommés, ratio de satisfaction feedback, taux de refus), carte d'alerte obsolescence dynamique reliée à `/admin/obsolete`, accordéons dépliables pour les questions sans résultat (refus no-source) et l'activité récente paginée avec export CSV.
 
 ## Tests
 
@@ -215,8 +226,8 @@ La latence d'un aller-retour HTTP supplémentaire (Next.js → n8n → Next.js �
 npm run test:rls          # 13 — isolation RLS, connexion directe app_role
 npm run test:embeddings   # 6  — embeddings locaux
 npm run test:auth         # 19 — callbacks Auth.js (11) + règles de visibilité documentVisibility.ts (8)
-npm run test:rag          # 34 — retrieval + génération RAG (sécurité + comportement)
-npm run test:ingestion    # 48 — pipeline d'ingestion + suppression de document + W3 (inclut unpublishDocument, resolve function, upsert review_tasks)
+npm run test:rag          # 36 — retrieval + génération RAG (sécurité + comportement)
+npm run test:ingestion    # 58 — pipeline d'ingestion + suppression de document + W3 (inclut unpublishDocument, resolve function, upsert review_tasks)
 npm run test:auth-http    # 5  — HTTP live (nécessite un serveur démarré)
 npm run test:conversations-http  # 8  — HTTP live, isolation par utilisateur (même société) sur /api/conversations
 npm run test:phase3       # rls + embeddings + auth + rag
