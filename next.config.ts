@@ -40,18 +40,22 @@ const nextConfig: NextConfig = {
     "/api/documents/upload": [
       "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+      "./node_modules/pdfjs-dist/**",
     ],
     "/api/n8n/ingest": [
       "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+      "./node_modules/pdfjs-dist/**",
     ],
     "/api/documents/[versionId]/retry": [
       "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+      "./node_modules/pdfjs-dist/**",
     ],
     "app/api/documents/[versionId]/retry/route": [
       "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+      "./node_modules/pdfjs-dist/**",
     ],
   },
 };

@@ -13,9 +13,15 @@
 // real, API-compatible implementation (confirmed locally: it exports
 // a working DOMMatrix constructor), not a stub.
 import { DOMMatrix } from "@napi-rs/canvas";
+// @ts-expect-error pdfjs-dist worker mjs module
+import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 
 if (typeof globalThis.DOMMatrix === "undefined") {
   // @napi-rs/canvas's DOMMatrix is runtime-compatible with the
   // browser's; only the TypeScript lib.dom.d.ts shape differs.
   (globalThis as unknown as { DOMMatrix: unknown }).DOMMatrix = DOMMatrix;
+}
+
+if (typeof (globalThis as unknown as { pdfjsWorker?: unknown }).pdfjsWorker === "undefined") {
+  (globalThis as unknown as { pdfjsWorker: unknown }).pdfjsWorker = pdfjsWorker;
 }
