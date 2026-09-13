@@ -669,203 +669,43 @@ export default function DocumentsPage() {
           </button>
         </div>
       ) : (
-        <>
-          {/* ── Mobile cards (< md) ──────────────────────────────────────── */}
-          <div className="md:hidden flex flex-col gap-3">
-            {filteredDocs.map((doc) => {
-              const statusKey = doc.latest_status ?? doc.status;
-              const isOverdue =
-                doc.status === "published" &&
-                doc.review_date != null &&
-                new Date(doc.review_date) < new Date();
-              const isArchived = statusKey === "archived";
-
-              return (
-                <div
-                  key={doc.id}
-                  className={`bg-white rounded-2xl border border-ink-100 p-4 space-y-3 ${
-                    isArchived ? "opacity-60 bg-paper-100/40" : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-ink-950 text-sm truncate" title={doc.title}>
-                        {doc.title}
-                      </p>
-                      {doc.description && (
-                        <p className="text-xs text-ink-400 truncate mt-0.5" title={doc.description}>
-                          {doc.description}
-                        </p>
-                      )}
-                      <p className="text-xs text-ink-500 font-medium mt-1 truncate">
-                        {doc.company_name ?? "ZEN Knowledge"} · {doc.department_name ?? "Groupe"}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      {retryingId === doc.latest_version_id ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 animate-pulse flex items-center gap-1">
-                          <RefreshCw size={11} className="animate-spin" />
-                          <span>Indexation…</span>
-                        </span>
-                      ) : (
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[statusKey] ?? "bg-ink-100 text-ink-500"}`}>
-                          {STATUS_LABELS[statusKey] ?? statusKey}
-                        </span>
-                      )}
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"}`}>
-                        {VISIBILITY_LABELS[doc.visibility] ?? doc.visibility}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Error banner if failed */}
-                  {doc.latest_status === "failed" && doc.latest_error_message && (
-                    <div className="flex items-start gap-1.5 p-2 bg-red-50 text-red-700 rounded-lg text-xs border border-red-100">
-                      <AlertCircle size={14} className="shrink-0 text-red-600 mt-0.5" />
-                      <span className="truncate">{doc.latest_error_message}</span>
-                    </div>
-                  )}
-
-                  {/* Meta row */}
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-400">
-                    <span className="font-medium text-ink-700" title={doc.owner_email}>
-                      {doc.owner_name || doc.owner_email}
-                    </span>
-                    {doc.latest_version && (
-                      <span>
-                        v{doc.latest_version}
-                        {doc.version_count > 1 && <span className="text-ink-300 ml-1">({doc.version_count} v.)</span>}
-                      </span>
-                    )}
-                    {doc.review_date && (
-                      <span
-                        className={
-                          isOverdue
-                            ? "inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium bg-orange-50 text-orange-700 border border-orange-200"
-                            : ""
-                        }
-                      >
-                        {new Date(doc.review_date).toLocaleDateString("fr-FR")}
-                        {isOverdue && " · Dépassée"}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Actions Mobile */}
-                  <div className="flex items-center gap-2 border-t border-ink-100 pt-3">
-                    {isArchived && doc.latest_version_id && (
-                      <button
-                        onClick={() => handleUnarchive(doc.latest_version_id!, doc.title)}
-                        disabled={unarchivingId === doc.latest_version_id}
-                        className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-lime-100 text-ink-950 border border-lime-300 flex items-center gap-1 cursor-pointer"
-                      >
-                        <RotateCcw size={13} />
-                        <span>Réactiver</span>
-                      </button>
-                    )}
-
-                    {doc.latest_status === "ready" && doc.latest_version_id && (
-                      <button
-                        onClick={() => handlePublish(doc.latest_version_id!)}
-                        disabled={publishingId === doc.latest_version_id}
-                        className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-lime-400 text-ink-950 hover:bg-lime-500 disabled:opacity-50 transition-colors"
-                      >
-                        Publier
-                      </button>
-                    )}
-
-                    {doc.latest_version_id && (
-                      <button
-                        type="button"
-                        onClick={() => !isArchived && handleRetry(doc.latest_version_id!)}
-                        disabled={isArchived || retryingId === doc.latest_version_id}
-                        className={`p-1.5 rounded-lg ${
-                          isArchived
-                            ? "text-ink-300 opacity-40 cursor-not-allowed"
-                            : "text-ink-600 hover:bg-paper-100 cursor-pointer"
-                        }`}
-                        title={isArchived ? "Réactivez le document pour le réindexer" : "Réindexer"}
-                      >
-                        <RefreshCw size={14} className={retryingId === doc.latest_version_id ? "animate-spin" : ""} />
-                      </button>
-                    )}
-
-                    {doc.latest_version_id && (
-                      <a
-                        href={`/documents/${doc.latest_version_id}/preview`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 text-ink-600 hover:text-lime-700 rounded-lg cursor-pointer"
-                        title="Voir"
-                      >
-                        <ExternalLink size={14} />
-                      </a>
-                    )}
-
-                    {doc.status === "published" && doc.latest_version_id && (
-                      <button
-                        onClick={() => handleArchive(doc.latest_version_id!, doc.title)}
-                        disabled={archivingId === doc.latest_version_id}
-                        className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg cursor-pointer"
-                        title="Archiver"
-                      >
-                        <Archive size={14} />
-                      </button>
-                    )}
-
-                    {doc.latest_version_id && (
-                      <button
-                        onClick={() => handleDelete(doc.latest_version_id!, doc.title)}
-                        disabled={deletingId === doc.latest_version_id}
-                        className="p-1.5 text-ink-400 hover:text-red-600 rounded-lg transition-colors ml-auto cursor-pointer"
-                        title="Supprimer"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* ── Desktop table (md+) — responsive avec scroll horizontal contrôlé & alignement top ── */}
-          <div className="hidden md:block bg-white rounded-2xl border border-ink-100 overflow-x-auto shadow-2xs">
+        /* ── Tableau documentaire — responsive avec scroll horizontal contrôlé & alignement top ── */
+        <div className="bg-white rounded-2xl border border-ink-100 overflow-x-auto shadow-2xs">
             <table className="w-full min-w-[960px] text-sm table-fixed">
               <colgroup>
-                <col className="w-[22%] min-w-[190px]" />
-                <col className="w-[14%] min-w-[130px]" />
-                <col className="w-[9%] min-w-[85px]" />
-                <col className="w-[12%] min-w-[115px]" />
-                <col className="w-[6%] min-w-[65px]" />
-                <col className="w-[14%] min-w-[130px]" />
-                <col className="w-[15%] min-w-[140px]" />
-                <col className="w-[8%] min-w-[75px]" />
+                <col className="w-[22%]" />
+                <col className="w-[14%]" />
+                <col className="w-[9%]" />
+                <col className="w-[12%]" />
+                <col className="w-[6%]" />
+                <col className="w-[14%]" />
+                <col className="w-[15%]" />
+                <col className="w-[8%]" />
               </colgroup>
               <thead className="sticky top-0 bg-paper-100/95 backdrop-blur-xs border-b border-ink-100 z-10 shadow-2xs">
                 <tr>
-                  <th className="text-left px-3.5 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[22%] min-w-[190px] text-left px-3.5 py-3 font-medium text-ink-500 whitespace-nowrap">
                     {renderSortHeader("title", "Titre")}
                   </th>
-                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[14%] min-w-[130px] text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
                     Société · Service
                   </th>
-                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[9%] min-w-[85px] text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
                     Visibilité
                   </th>
-                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[12%] min-w-[115px] text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
                     Statut
                   </th>
-                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[6%] min-w-[65px] text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
                     {renderSortHeader("version", "Version")}
                   </th>
-                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[14%] min-w-[130px] text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
                     Propriétaire
                   </th>
-                  <th className="text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[15%] min-w-[140px] text-left px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
                     {renderSortHeader("review_date", "Révision")}
                   </th>
-                  <th className="text-right px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
+                  <th className="w-[8%] min-w-[75px] text-right px-3 py-3 font-medium text-ink-500 whitespace-nowrap">
                     Action
                   </th>
                 </tr>
@@ -886,8 +726,8 @@ export default function DocumentsPage() {
                         isArchived ? "opacity-60 bg-paper-100/40" : ""
                       }`}
                     >
-                      {/* Titre (proprement tronqué avec ellipsis CSS et title natif complet) */}
-                      <td className="px-3.5 py-2.5 align-top overflow-hidden">
+                      {/* Titre (proprement tronqué avec ellipsis CSS et title natif complet, max-w-0 forcé) */}
+                      <td className="w-[22%] min-w-[190px] max-w-0 px-3.5 py-2.5 align-top overflow-hidden">
                         <div className="min-w-0 w-full overflow-hidden">
                           <p
                             className="font-semibold text-ink-950 truncate block text-xs sm:text-sm cursor-default"
@@ -907,7 +747,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Société · Service (2 lignes max, aligné en haut) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap align-top overflow-hidden">
+                      <td className="w-[14%] min-w-[130px] max-w-0 px-3 py-2.5 whitespace-nowrap align-top overflow-hidden">
                         <div className="min-w-0 w-full overflow-hidden">
                           <span className="font-medium text-ink-900 text-xs truncate block" title={doc.company_name}>
                             {doc.company_name ?? "—"}
@@ -922,7 +762,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Visibilité (badge aligné en haut) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                      <td className="w-[9%] min-w-[85px] px-3 py-2.5 whitespace-nowrap align-top">
                         <span
                           className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                             VISIBILITY_COLORS[doc.visibility] ?? "bg-paper-50 text-ink-600"
@@ -933,7 +773,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Statut & Erreur (troncature propre et pas de débordement) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap align-top overflow-hidden">
+                      <td className="w-[12%] min-w-[115px] max-w-0 px-3 py-2.5 whitespace-nowrap align-top overflow-hidden">
                         <div className="flex flex-col items-start gap-1 min-w-0 w-full max-w-full overflow-hidden">
                           {retryingId === doc.latest_version_id ? (
                             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 animate-pulse flex items-center gap-1 shrink-0">
@@ -964,7 +804,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Version (aligné en haut) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap align-top text-ink-600 text-xs">
+                      <td className="w-[6%] min-w-[65px] px-3 py-2.5 whitespace-nowrap align-top text-ink-600 text-xs">
                         <span className="inline-block mt-0.5">
                           {doc.latest_version ? `v${doc.latest_version}` : "—"}
                           {doc.version_count > 1 && (
@@ -974,7 +814,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Propriétaire (Nom seul, email en title, aligné en haut) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap align-top text-xs overflow-hidden">
+                      <td className="w-[14%] min-w-[130px] max-w-0 px-3 py-2.5 whitespace-nowrap align-top text-xs overflow-hidden">
                         <span
                           className="font-medium text-ink-900 truncate block cursor-default mt-0.5"
                           title={doc.owner_email}
@@ -984,7 +824,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Date de révision (aligné en haut) */}
-                      <td className="px-3 py-2.5 whitespace-nowrap align-top text-xs overflow-hidden">
+                      <td className="w-[15%] min-w-[140px] max-w-0 px-3 py-2.5 whitespace-nowrap align-top text-xs overflow-hidden">
                         <div className="mt-0.5">
                           {doc.review_date ? (
                             <span
@@ -1005,7 +845,7 @@ export default function DocumentsPage() {
                       </td>
 
                       {/* Action (icônes standardisées avec menu kebab ⋯ parfaitement aligné) */}
-                      <td className="px-3 py-2.5 text-right align-top relative whitespace-nowrap">
+                      <td className="w-[8%] min-w-[75px] px-3 py-2.5 text-right align-top relative whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-1">
                           {/* Voir le document (toujours présent dans toutes les lignes) */}
                           {doc.latest_version_id && (
@@ -1134,7 +974,6 @@ export default function DocumentsPage() {
               </tbody>
             </table>
           </div>
-        </>
       )}
 
       {/* Archive Confirmation Modal (Étape 3) */}
@@ -1165,9 +1004,10 @@ export default function DocumentsPage() {
               <button
                 type="button"
                 onClick={confirmAndArchive}
-                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl py-2 text-sm font-medium transition-colors cursor-pointer shadow-xs"
+                disabled={Boolean(archivingId)}
+                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl py-2 text-sm font-medium transition-colors cursor-pointer shadow-xs disabled:opacity-50"
               >
-                Archiver
+                {archivingId ? "Archivage…" : "Archiver"}
               </button>
             </div>
           </div>
@@ -1202,9 +1042,10 @@ export default function DocumentsPage() {
               <button
                 type="button"
                 onClick={confirmAndDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2 text-sm font-medium transition-colors cursor-pointer shadow-xs"
+                disabled={Boolean(deletingId)}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2 text-sm font-medium transition-colors cursor-pointer shadow-xs disabled:opacity-50"
               >
-                Supprimer
+                {deletingId ? "Suppression…" : "Supprimer"}
               </button>
             </div>
           </div>
