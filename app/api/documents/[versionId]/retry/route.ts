@@ -21,16 +21,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ve
     }
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    if (err instanceof IngestionForbiddenError) {
-      return NextResponse.json({ error: err.message }, { status: 403 });
+    if (err instanceof IngestionForbiddenError || (err as Error)?.name === "IngestionForbiddenError") {
+      return NextResponse.json({ error: (err as Error).message }, { status: 403 });
     }
-    if (err instanceof IngestionNotFoundError) {
-      return NextResponse.json({ error: err.message }, { status: 404 });
+    if (err instanceof IngestionNotFoundError || (err as Error)?.name === "IngestionNotFoundError") {
+      return NextResponse.json({ error: (err as Error).message }, { status: 404 });
     }
-    if (err instanceof IngestionError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: 422 });
+    if (err instanceof IngestionError || (err as Error)?.name === "IngestionError") {
+      return NextResponse.json({ error: (err as Error).message, code: (err as IngestionError).code }, { status: 422 });
     }
+    const message = (err as Error)?.message || "Erreur interne lors de la réindexation.";
     console.error("POST /api/documents/[versionId]/retry: unexpected error", err);
-    return NextResponse.json({ error: "internal error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

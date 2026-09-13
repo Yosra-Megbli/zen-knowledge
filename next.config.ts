@@ -45,6 +45,10 @@ const nextConfig: NextConfig = {
       "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
       "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
     ],
+    "/api/documents/[versionId]/retry": [
+      "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
+      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**",
+    ],
   },
 };
 

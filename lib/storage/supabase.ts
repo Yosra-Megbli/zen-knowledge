@@ -20,7 +20,7 @@ function sanitizeFileName(fileName: string): string {
 
 export class SupabaseStorageProvider implements StorageProvider {
   private get bucket() {
-    return requireEnv("SUPABASE_STORAGE_BUCKET");
+    return process.env.SUPABASE_STORAGE_BUCKET || "nb";
   }
 
   private get baseUrl() {
